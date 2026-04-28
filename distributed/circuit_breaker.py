@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工业IoT — 熔断器 + 指数退避重试
+xiaoV Industrial IoT — 熔断器 + 指数退避重试
 Circuit Breaker pattern: CLOSED → OPEN → HALF_OPEN → CLOSED
 """
 import time, logging, functools

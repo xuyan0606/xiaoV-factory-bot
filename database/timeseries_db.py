@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工厂 — 时序数据库引擎
+xiaoV Factory — 时序数据库引擎
 纯SQLite实现，支持：点写入、自动降采样、保留策略、查询聚合
 类似InfluxDB/TDengine的核心概念，零外部依赖
 """
@@ -296,7 +296,7 @@ if __name__ == '__main__':
     import random
     db = TimeSeriesDB()
     print("=" * 50)
-    print("  科为博工厂 · 时序数据库引擎")
+    print("  xiaoV Factory · 时序数据库引擎")
     print("=" * 50)
 
     # 注册指标

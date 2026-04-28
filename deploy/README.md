@@ -1,13 +1,13 @@
 # =============================================================================
-# 科为博工厂数字化项目 — 一键部署文档
-# 内蒙古科为博生物科技有限公司
+# xiaoV Factory数字化项目 — 一键部署文档
+# xiaoV Factory Bot
 # =============================================================================
 
-# 科为博工厂数字化项目部署指南
+# xiaoV Factory数字化项目部署指南
 
 ## 项目概述
 
-科为博工厂数字化项目是面向内蒙古科为博生物科技有限公司的智能制造升级项目，包含：
+xiaoV Factory数字化项目是面向xiaoV Factory Bot的智能制造升级项目，包含：
 
 - **工厂机器人**（Flask）：钉钉群机器人，提供车间状态查询、生产批次追踪、设备管理等功能
 - **工业IoT系统**：MQTT消息中间件、Modbus PLC模拟、数据采集网关、SCADA大屏
@@ -128,7 +128,7 @@ curl http://localhost:9090/-/healthy
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `FLASK_ENV` | 运行环境 | production |
-| `DINGTALK_TOKEN` | 钉钉安全校验Token | crvab_factory_2026 |
+| `DINGTALK_TOKEN` | 钉钉安全校验Token | xiaov_factory_2026 |
 | `DINGTALK_WEBHOOK` | 钉钉群Webhook | (必填) |
 | `GRAFANA_ADMIN_USER` | Grafana管理员 | admin |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana密码 | admin |
@@ -196,7 +196,7 @@ mosquitto_passwd -c /mosquitto/config/passwd admin
 docker run -it --rm -p 80:80 -p 443:443 \
   -v /etc/letsencrypt:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
-  -d factory.crvab.com
+  -d factory.xiaov.com
 ```
 
 ### 3. 数据持久化
@@ -305,7 +305,7 @@ docker compose -f deploy/docker-compose.yml up -d
 
 | 端点 | 服务 | 预期响应 |
 |------|------|---------|
-| `/health` | Flask | `{"status":"ok","factory":"内蒙古科为博生物科技","version":"2.0"}` |
+| `/health` | Flask | `{"status":"ok","factory":"xiaoV Factory Bot","version":"2.0"}` |
 | `/-/healthy` | Prometheus | 空响应 200 OK |
 | `/api/health` | Grafana | `{"database":"ok",...}` |
 | `$SYS/broker/uptime` | MQTT | uptime 数值 |
@@ -323,14 +323,14 @@ docker compose logs flask-app
 lsof -i :5001
 
 # 检查 Python 依赖
-docker exec crvab-flask-app pip list
+docker exec xiaov-flask-app pip list
 ```
 
 #### Q: MQTT 连接失败
 
 ```bash
 # 验证 Broker 运行状态
-docker exec crvab-mqtt-broker mosquitto_sub -t '$SYS/#' -C 1
+docker exec xiaov-mqtt-broker mosquitto_sub -t '$SYS/#' -C 1
 
 # 检查端口
 nc -zv localhost 1883
@@ -349,7 +349,7 @@ docker compose logs mqtt-broker
 curl http://localhost:5001/metrics
 
 # 测试容器间通信
-docker exec crvab-prometheus wget -qO- http://flask-app:5001/metrics
+docker exec xiaov-prometheus wget -qO- http://flask-app:5001/metrics
 ```
 
 #### Q: Grafana 面板不显示数据
@@ -470,7 +470,7 @@ hermesWorkspace/
 
 ## 许可证
 
-Copyright (c) 2026 内蒙古科为博生物科技有限公司
+Copyright (c) 2026 xiaoV Factory Bot
 
 ---
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工业物联网 — Modbus TCP 模拟PLC
+xiaoV工业物联网 — Modbus TCP 模拟PLC
 模拟PLC保持寄存器，供数据采集网关读取
 """
 import asyncio, struct, random, time, logging

@@ -1,4 +1,4 @@
-# 科为博工业IoT分布式系统架构
+# xiaoV Industrial IoT分布式系统架构
 
 ## 整体架构
 

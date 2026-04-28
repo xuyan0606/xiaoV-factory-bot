@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工业IoT — 分布式系统监控
+xiaoV Industrial IoT — 分布式系统监控
 节点健康检查、数据流延迟监控、系统指标采集、告警引擎
 """
 import asyncio, json, time, logging

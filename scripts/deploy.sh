@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# 科为博工厂数字化项目 — 一键部署脚本
+# xiaoV Factory数字化项目 — 一键部署脚本
 # 用法: bash scripts/deploy.sh [环境]
 #   环境: production (默认) | staging
 # =============================================================================
@@ -14,7 +14,7 @@ ENV_FILE="${DEPLOY_DIR}/.env"
 BACKUP_DIR="${PROJECT_DIR}/backups/$(date +%Y%m%d_%H%M%S)"
 ROLLBACK_DIR="${PROJECT_DIR}/backups"
 DOCKER_REGISTRY="ghcr.io"
-IMAGE_NAME="crvab-factory-bot"
+IMAGE_NAME="xiaov-factory-bot"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -25,7 +25,7 @@ NC='\033[0m' # No Color
 
 # ==================== 环境选择 ====================
 ENV="${1:-production}"
-echo -e "${BLUE}🔧 科为博工厂 — 部署脚本${NC}"
+echo -e "${BLUE}🔧 xiaoV Factory — 部署脚本${NC}"
 echo -e "${BLUE}================================${NC}"
 echo -e "环境: ${YELLOW}${ENV}${NC}"
 echo -e "项目目录: ${PROJECT_DIR}"
@@ -228,7 +228,7 @@ health_check() {
     fi
 
     # 检查 MQTT Broker
-    if docker exec crvab-mqtt-broker mosquitto_sub -t '$SYS/broker/uptime' -C 1 -W 3 > /dev/null 2>&1; then
+    if docker exec xiaov-mqtt-broker mosquitto_sub -t '$SYS/broker/uptime' -C 1 -W 3 > /dev/null 2>&1; then
         echo -e "  ✅ MQTT Broker 正常 (port 1883)"
     else
         echo -e "  ${YELLOW}  ⚠️  MQTT Broker 未就绪${NC}"
@@ -273,7 +273,7 @@ rollback() {
 # ==================== 显示部署摘要 ====================
 show_summary() {
     echo -e "${GREEN}================================${NC}"
-    echo -e "${GREEN}✅ 科为博工厂部署完成！${NC}"
+    echo -e "${GREEN}✅ xiaoV Factory部署完成！${NC}"
     echo -e "${GREEN}================================${NC}"
     echo ""
     echo -e "  📍 服务地址:"
@@ -301,7 +301,7 @@ show_summary() {
 
 # ==================== 主流程 ====================
 main() {
-    echo -e "${BLUE}🚀 科为博工厂 — ${ENV}部署开始${NC}"
+    echo -e "${BLUE}🚀 xiaoV Factory — ${ENV}部署开始${NC}"
     echo -e "${BLUE}================================${NC}"
 
     preflight_check

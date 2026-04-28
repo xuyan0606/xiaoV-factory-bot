@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工厂 — 设备维保 RAG 知识库
+xiaoV Factory — 设备维保 RAG 知识库
 纯 Python 实现：TF-IDF 向量化 + 余弦相似度搜索
 零外部依赖
 """
@@ -332,7 +332,7 @@ if __name__ == '__main__':
         print(f"来源: {result['sources']}")
         print(f"\n回答:\n{result['answer']}")
     else:
-        print("\n科为博设备维保知识库 RAG 系统")
+        print("\nxiaoV Equipment Maintenance KB RAG 系统")
         print("输入问题查询，输入 q 退出")
         print("=" * 50)
         while True:

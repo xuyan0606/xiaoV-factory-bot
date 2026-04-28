@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>内蒙古科为博生物科技 — 科技赋能生物智造</title>
+<title>xiaoV Factory Bot — 科技赋能生物智造</title>
 <style>
   * { margin: 0; padding: 0; }
   body {
@@ -25,8 +25,8 @@
 <body>
 <script>
 // ================================================================
-// 内蒙古科为博生物科技有限公司 — 企业宣传片 V2
-// INNER MONGOLIA CRVAB BIO-TECHNOLOGY CO., LTD
+// xiaoV Factory Bot — 企业宣传片 V2
+// INNER MONGOLIA XIAOV BIO-TECHNOLOGY CO., LTD
 // ================================================================
 
 // ---- 配色系统 ----
@@ -177,7 +177,7 @@ function sceneLogo(t, progress) {
   }
   pop();
 
-  // CRVAB 标题
+  // XIAOV 标题
   let logoY = H * 0.38;
   let scalePulse = 1 + sin(t*0.6)*0.008;
   textFont('Courier New', 90);
@@ -188,24 +188,24 @@ function sceneLogo(t, progress) {
     let ga = map(i,0,6,0,18*pf);
     fill(C.cyan[0], C.cyan[1], C.cyan[2], ga);
     textSize(90*scalePulse + i*4);
-    text('CRVAB', W/2, logoY);
+    text('XIAOV', W/2, logoY);
   }
   fill(C.cyan[0], C.cyan[1], C.cyan[2], 255*pf);
   textSize(90*scalePulse);
-  text('CRVAB', W/2, logoY);
+  text('XIAOV', W/2, logoY);
 
   // 英文全称
   textStyle(NORMAL);
   textFont('Courier New', 13);
   fill(C.gray[0], C.gray[1], C.gray[2], 160*pf);
-  let enFull = 'INNER MONGOLIA CRVAB BIO-TECHNOLOGY CO., LTD';
+  let enFull = 'INNER MONGOLIA XIAOV BIO-TECHNOLOGY CO., LTD';
   text(enFull, W/2, logoY + 38);
 
   // 中文全称
   textStyle(BOLD);
   textFont('PingFang SC, sans-serif', 22);
   fill(C.white[0], C.white[1], C.white[2], 220*pf2);
-  let cnFull = '内蒙古科为博生物科技有限公司';
+  let cnFull = 'xiaoV Factory Bot';
   text(cnFull, W/2, logoY + 68);
 
   // 下划线
@@ -658,7 +658,7 @@ function sceneDigital(t, progress) {
     textAlign(CENTER, CENTER);
     textStyle(NORMAL);
     fill(C.green[0], C.green[1], C.green[2], 150*diagFade);
-    text('从传统发酵到智能制造 — 科为博全面数字化升级进行中', W/2, dy);
+    text('从传统发酵到智能制造 — xiaoV全面数字化升级进行中', W/2, dy);
   }
 }
 
@@ -778,23 +778,23 @@ function sceneEnding(t, progress) {
     let ga = map(i,0,6,0,15*pf);
     fill(C.cyan[0], C.cyan[1], C.cyan[2], ga);
     textSize(s + i*5);
-    text('CRVAB', W/2, logoY);
+    text('XIAOV', W/2, logoY);
   }
   fill(C.cyan[0], C.cyan[1], C.cyan[2], 255*pf);
   textSize(s);
-  text('CRVAB', W/2, logoY);
+  text('XIAOV', W/2, logoY);
 
   // 公司名
   textFont('PingFang SC, sans-serif', 18);
   textStyle(BOLD);
   fill(C.white[0], C.white[1], C.white[2], 200*pf);
-  text('内蒙古科为博生物科技有限公司', W/2, logoY + 40);
+  text('xiaoV Factory Bot', W/2, logoY + 40);
 
   // 英语名
   textFont('Courier New', 11);
   textStyle(NORMAL);
   fill(C.gray[0], C.gray[1], C.gray[2], 120*pf);
-  text('INNER MONGOLIA CRVAB BIO-TECHNOLOGY CO., LTD', W/2, logoY + 58);
+  text('INNER MONGOLIA XIAOV BIO-TECHNOLOGY CO., LTD', W/2, logoY + 58);
 
   // 标语
   if(pf2 > 0) {
@@ -908,12 +908,12 @@ function drawIndicator() {
 }
 
 function keyPressed() {
-  if(key === 's') saveCanvas('crvab_promo_v2', 'png');
+  if(key === 's') saveCanvas('xiaov_promo_v2', 'png');
   if(key === ' ') { sceneIdx = min(sceneIdx+1, SCENES.length-1); sceneTime = 0; }
   if(key === 'r') { sceneIdx=0; sceneTime=0; totalTime=0; }
   if(key === 'f') fullscreen(!fullscreen());
 }
 </script>
-<div id="info">科为博企业宣传片 · [S]截图 [Space]下一场景 [R]重播 [F]全屏</div>
+<div id="info">xiaoV企业宣传片 · [S]截图 [Space]下一场景 [R]重播 [F]全屏</div>
 </body>
 </html>

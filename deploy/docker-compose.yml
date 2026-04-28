@@ -1,5 +1,5 @@
 # =============================================================================
-# 科为博工厂数字化项目 — Docker Compose 多服务编排
+# xiaoV Factory数字化项目 — Docker Compose 多服务编排
 # 一键部署：docker compose up -d
 # =============================================================================
 
@@ -29,7 +29,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    container_name: crvab-flask-app
+    container_name: xiaov-flask-app
     restart: unless-stopped
     ports:
       - "5001:5001"
@@ -41,7 +41,7 @@ services:
       - FLASK_ENV=production
       - FLASK_DEBUG=0
       - TZ=Asia/Shanghai
-      - DINGTALK_TOKEN=${DINGTALK_TOKEN:-crvab_factory_2026}
+      - DINGTALK_TOKEN=${DINGTALK_TOKEN:-xiaov_factory_2026}
       - DINGTALK_WEBHOOK=${DINGTALK_WEBHOOK:-}
     networks:
       - factory-net
@@ -62,7 +62,7 @@ services:
   # ==================== MQTT Broker ====================
   mqtt-broker:
     image: eclipse-mosquitto:2.0
-    container_name: crvab-mqtt-broker
+    container_name: xiaov-mqtt-broker
     restart: unless-stopped
     ports:
       - "1883:1883"
@@ -89,7 +89,7 @@ services:
   # ==================== Prometheus 监控系统 ====================
   prometheus:
     image: prom/prometheus:v2.53.0
-    container_name: crvab-prometheus
+    container_name: xiaov-prometheus
     restart: unless-stopped
     ports:
       - "9090:9090"
@@ -118,7 +118,7 @@ services:
   # ==================== Grafana 可视化面板 ====================
   grafana:
     image: grafana/grafana:11.0.0
-    container_name: crvab-grafana
+    container_name: xiaov-grafana
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -145,7 +145,7 @@ services:
   # ==================== Node Exporter（主机监控） ====================
   node-exporter:
     image: prom/node-exporter:v1.8.0
-    container_name: crvab-node-exporter
+    container_name: xiaov-node-exporter
     restart: unless-stopped
     ports:
       - "9100:9100"
@@ -169,7 +169,7 @@ services:
   # ==================== Nginx 反向代理 ====================
   nginx:
     image: nginx:1.26-alpine
-    container_name: crvab-nginx
+    container_name: xiaov-nginx
     restart: unless-stopped
     ports:
       - "80:80"

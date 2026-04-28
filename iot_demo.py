@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博产线数据采集Demo v1.0
+xiaoV产线数据采集Demo v1.0
 MQTT + SQLite + Flask + ECharts 实时采集、存储、展示模拟生物反应器数据。
 
 运行:
@@ -73,7 +73,7 @@ app = Flask(__name__)
 
 INDEX = """<!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><title>科为博实时仪表盘</title>
+<head><meta charset="UTF-8"><title>xiaoV实时仪表盘</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -87,7 +87,7 @@ h1{text-align:center;font-size:20px;color:#00d4ff;letter-spacing:3px;margin-bott
 .st{display:flex;justify-content:space-between;font-size:9px;color:rgba(255,255,255,0.2);margin-top:6px;flex-shrink:0}
 </style></head>
 <body>
-<h1>🔥 科为博生物反应器实时监控</h1>
+<h1>🔥 xiaoV生物反应器实时监控</h1>
 <div class="grid">
 <div class="card"><div class="t">温度 TEMP</div><div class="chart" id="c1"></div></div>
 <div class="card"><div class="t">pH</div><div class="chart" id="c2"></div></div>

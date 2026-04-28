@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-科为博生物科技 MES 数据库核心表 DDL
-SQLite 实现 - 适用于内蒙古科为博生物科技有限公司
+xiaoV Biotech MES 数据库核心表 DDL
+SQLite 实现 - 适用于xiaoV Factory Bot
 
 包含114个表的完整Schema定义
 """
@@ -1342,7 +1342,7 @@ LEFT JOIN equipment_category ec ON e.category_id = ec.id;
 INIT_DATA_SQL = """
 -- 初始化公司
 INSERT OR IGNORE INTO org_company (id, code, name, address) VALUES
-(1, 'CRVAB', '内蒙古科为博生物科技有限公司', '内蒙古自治区');
+(1, 'XIAOV', 'xiaoV Factory Bot', '内蒙古自治区');
 
 -- 初始化物料分类
 INSERT OR IGNORE INTO material_category (id, code, name, level) VALUES

@@ -1,4 +1,4 @@
-# 科为博数字化转型 — 知识库
+# xiaoV数字化转型 — 知识库
 
 ## 酶制剂生产工艺数字化
 - 在线监测：pH/DO(Mettler Toledo/Hamilton)、近红外(NIR)光谱(Bruker)、软传感器预测酶活

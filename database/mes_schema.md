@@ -1,8 +1,8 @@
-# 科为博生物科技 MES 数据库设计
+# xiaoV Biotech MES 数据库设计
 
 ## 工厂背景
 
-- 企业：内蒙古科为博生物科技有限公司 (CRVAB)
+- 企业：xiaoV Factory Bot (XIAOV)
 - 主营：酶制剂、益生菌、生物发酵
 - 发酵车间：一期 12×50m³ + 二期 8×100m³
 - 提取车间、干燥塔3座、混合制粒、空压间、变电室、污水池
@@ -329,11 +329,11 @@
 | id | INTEGER | PK AUTOINCREMENT | 主键 |
 | product_id | INTEGER | FK→product(id) | 产品ID |
 | rule_name | VARCHAR(50) | NOT NULL | 规则名称 |
-| prefix | VARCHAR(10) | | 前缀: CRVAB |
+| prefix | VARCHAR(10) | | 前缀: XIAOV |
 | date_format | VARCHAR(20) | | 日期格式: YYYYMMDD |
 | seq_length | INTEGER | DEFAULT 4 | 流水号长度 |
 | separator | VARCHAR(5) | | 分隔符: - |
-| sample_rule | VARCHAR(50) | | 示例: CRVAB-20260427-0001 |
+| sample_rule | VARCHAR(50) | | 示例: XIAOV-20260427-0001 |
 | is_active | BOOLEAN | DEFAULT 1 | |
 
 #### batch_number_seq (批号流水号)
@@ -416,7 +416,7 @@
 | 字段名 | 类型 | 约束 | 说明 |
 |--------|------|------|------|
 | id | INTEGER | PK AUTOINCREMENT | 主键 |
-| batch_no | VARCHAR(50) | NOT NULL UNIQUE | 批号: CRVAB-YYYYMMDD-NNNN |
+| batch_no | VARCHAR(50) | NOT NULL UNIQUE | 批号: XIAOV-YYYYMMDD-NNNN |
 | work_order_id | INTEGER | FK→work_order(id) | 工单ID |
 | product_id | INTEGER | FK→product(id) | 产品ID |
 | product_name | VARCHAR(100) | | 产品名称 |
@@ -1169,4 +1169,4 @@
 ---
 
 *设计日期: 2026-04-27*
-*适用企业: 内蒙古科为博生物科技有限公司 (CRVAB)*
+*适用企业: xiaoV Factory Bot (XIAOV)*

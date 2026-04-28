@@ -1,5 +1,5 @@
 # =============================================================================
-# 科为博工厂数字化项目 — Prometheus 抓取配置
+# xiaoV Factory数字化项目 — Prometheus 抓取配置
 # 采集 Flask 应用指标、MQTT Broker、Node Exporter 主机指标
 # =============================================================================
 
@@ -11,7 +11,7 @@ global:
   # 外部标签，用于区分不同环境
   external_labels:
     environment: production
-    project: crvab-factory
+    project: xiaov-factory
     region: inner-mongolia
 
 # Alertmanager 配置（告警管理）

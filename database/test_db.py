@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工厂 — 数据库集成测试
+xiaoV Factory — 数据库集成测试
 测试 MES 核心表创建 + 时序数据库读写降采样
 """
 import sys, os, json, sqlite3, time
@@ -75,8 +75,8 @@ def test_mes_schema():
     test(f"创建了 {idx_count} 个索引", idx_count > 10)
 
     # 验证种子数据
-    c.execute("SELECT name FROM org_company WHERE code='CRVAB'")
-    test("种子数据: 科为博公司已初始化", c.fetchone() is not None)
+    c.execute("SELECT name FROM org_company WHERE code='XIAOV'")
+    test("种子数据: xiaoV Company已初始化", c.fetchone() is not None)
 
     conn.close()
     return tables
@@ -134,7 +134,7 @@ def test_integration():
     tsdb = TimeSeriesDB('/tmp/test_timeseries.db')
 
     # 直接插入批次，不依赖equipment_id外键
-    mes_db.execute("INSERT OR IGNORE INTO org_company (code, name) VALUES ('CRVAB', '科为博')")
+    mes_db.execute("INSERT OR IGNORE INTO org_company (code, name) VALUES ('XIAOV', 'xiaoV')")
     mes_db.execute("""
         INSERT OR IGNORE INTO batch_record (id, batch_no, product_id, status, batch_qty, created_at)
         VALUES (1, '20260427-F01', 1, 'RUNNING', 10000, datetime('now'))
@@ -173,7 +173,7 @@ def test_purge():
 
 if __name__ == '__main__':
     print("=" * 50)
-    print("  科为博工厂 · 数据库系统测试")
+    print("  xiaoV Factory · 数据库系统测试")
     print(f"  时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 50)
 

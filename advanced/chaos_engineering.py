@@ -1,5 +1,5 @@
 """
-科为博生物科技工厂 — 混沌工程实验套件
+xiaoV Factory — 混沌工程实验套件
 =========================================
 可运行的混沌实验引擎
 
@@ -926,7 +926,7 @@ class ChaosEngine:
       - 报告生成
     """
 
-    def __init__(self, title: str = "科为博工厂混沌工程实验"):
+    def __init__(self, title: str = "xiaoV Factory混沌工程实验"):
         self.title = title
         self._experiments: List[ChaosExperiment] = []
         self._report = ExperimentReport(title=title, start_time=time.time())
@@ -1114,10 +1114,10 @@ def demo_full_engine():
     """完整混沌引擎演示"""
     print("\n" + "#" * 60)
     print("# 混沌工程实验套件 — 完整演示")
-    print("# 科为博生物科技工厂")
+    print("# xiaoV Factory")
     print("#" * 60)
 
-    engine = ChaosEngine(title="科为博工厂混沌工程实验 (完整)")
+    engine = ChaosEngine(title="xiaoV Factory混沌工程实验 (完整)")
 
     # 注册所有实验
     engine.register(NetworkLatencyInjector(

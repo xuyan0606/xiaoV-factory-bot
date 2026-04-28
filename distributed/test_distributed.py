@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工业IoT — 分布式系统集成测试
+xiaoV Industrial IoT — 分布式系统集成测试
 测试内容：
 1. 一致性哈希设备分配
 2. 消息队列生产消费
@@ -312,7 +312,7 @@ async def test_integration():
 
 async def main():
     print("=" * 50)
-    print("  科为博工厂 · 分布式系统集成测试")
+    print("  xiaoV Factory · 分布式系统集成测试")
     print(f"  时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 50)
 

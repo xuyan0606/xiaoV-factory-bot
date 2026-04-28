@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工业IoT — 分布式数据存储
+xiaoV Industrial IoT — 分布式数据存储
 分片存储、主从复制、故障检测、数据补传
 """
 import asyncio, json, time, logging, sqlite3, os, threading

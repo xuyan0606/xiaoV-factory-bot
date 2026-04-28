@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工业IoT — 分布式采集引擎
+xiaoV Industrial IoT — 分布式采集引擎
 一致性哈希分配设备、心跳检测、故障转移
 """
 import asyncio, hashlib, json, time, logging, random

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工厂 — 智能监控中心
+xiaoV Factory — 智能监控中心
 集成 RAG 知识库 + 时序异常检测 + 钉钉告警
 """
 import sys, os, json, time, random, logging, threading
@@ -82,7 +82,7 @@ class SmartMonitoringCenter:
         """生成钉钉群消息格式"""
         recent = self.alert_history[-max_alerts:] if self.alert_history else []
 
-        lines = ["**科为博智能监控日报**", ""]
+        lines = ["**xiaoV Smart Monitor Daily**", ""]
 
         # 知识库统计
         lines.append(f"📚 知识库: {len(self.kb.documents)}篇设备维保文档")
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     center = SmartMonitoringCenter()
 
     print("=" * 50)
-    print("  科为博智能监控中心")
+    print("  xiaoV Smart Monitor Center")
     print("=" * 50)
 
     # 模拟传感器流

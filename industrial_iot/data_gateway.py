@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工业物联网 — 数据采集网关
+xiaoV工业物联网 — 数据采集网关
 统一采集MQTT/Modbus/OPC UA数据，存入SQLite，推送WebSocket
 """
 import asyncio, json, sqlite3, time, struct, logging, os, threading

@@ -1,4 +1,4 @@
-# 科为博生物科技工厂 — 高阶架构设计
+# xiaoV Factory — 高阶架构设计
 
 > 项目: 酶制剂/益生菌/生物发酵产线数字化
 > 目录: /Users/xuyan/software/hermesWorkspace/advanced/
@@ -254,4 +254,4 @@ open digital_twin_arch.md
 
 ---
 
-*文档版本: v1.0 | 科为博生物科技工厂 · 数字化项目*
+*文档版本: v1.0 | xiaoV Factory · 数字化项目*

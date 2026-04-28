@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工业IoT — 高可用消息队列
+xiaoV Industrial IoT — 高可用消息队列
 支持持久化、ACK确认、死信队列、背压控制
 """
 import asyncio, json, time, logging, os, sqlite3

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>科为博 — 科技赋能生物智造</title>
+<title>xiaoV — 科技赋能生物智造</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -27,8 +27,8 @@
 <body>
 <script>
 // ============================================================
-// 科为博 企业宣传片 — p5.js 动画
-// CRVAB — 科技赋能生物智造
+// xiaoV 企业宣传片 — p5.js 动画
+// XIAOV — 科技赋能生物智造
 // ============================================================
 
 // ---- 配色 ----
@@ -157,24 +157,24 @@ function sceneLogo(buf, t, progress) {
   buf.textFont('monospace', 80);
   buf.textStyle(BOLD);
 
-  // "CRVAB" glow title
+  // "XIAOV" glow title
   let titleAlpha = fadeIn;
   for (let i = 5; i > 0; i--) {
     let a = map(i, 0, 5, 0, 20 * titleAlpha);
     buf.fill(0, 212, 255, a);
     buf.textSize(80 + i * 3);
-    buf.text('CRVAB', W/2, titleY);
+    buf.text('XIAOV', W/2, titleY);
   }
   buf.fill(0, 212, 255, 255 * titleAlpha);
   buf.textSize(80);
-  buf.text('CRVAB', W/2, titleY);
+  buf.text('XIAOV', W/2, titleY);
 
   // Subtitle
   buf.textSize(22);
   buf.textStyle(NORMAL);
   buf.fill(232, 240, 255, 200 * fadeIn);
   let subY = H * 0.52;
-  buf.text('内蒙古科为博生物科技有限公司', W/2, subY);
+  buf.text('xiaoV Factory Bot', W/2, subY);
 
   // Tagline - with typewriter effect
   let tagline = '科技赋能生物智造';
@@ -569,7 +569,7 @@ function sceneEnding(buf, t, progress) {
   buf.textAlign(CENTER, CENTER);
   buf.textStyle(BOLD);
 
-  // Large CRVAB logo
+  // Large XIAOV logo
   let logoY = H * 0.38;
   let s = 100 + sin(t * 0.5) * 2;
 
@@ -577,17 +577,17 @@ function sceneEnding(buf, t, progress) {
     let a = map(i, 0, 5, 0, 15 * fadeIn);
     buf.fill(0, 212, 255, a);
     buf.textSize(s + i * 4);
-    buf.text('CRVAB', W/2, logoY);
+    buf.text('XIAOV', W/2, logoY);
   }
   buf.fill(0, 212, 255, 255 * fadeIn);
   buf.textSize(s);
-  buf.text('CRVAB', W/2, logoY);
+  buf.text('XIAOV', W/2, logoY);
 
   // Subtitle
   buf.textSize(18);
   buf.textStyle(NORMAL);
   buf.fill(232, 240, 255, 200 * fadeIn);
-  buf.text('内蒙古科为博生物科技有限公司', W/2, logoY + 50);
+  buf.text('xiaoV Factory Bot', W/2, logoY + 50);
 
   // Slogan
   if (fadeIn2 > 0) {
@@ -710,7 +710,7 @@ function drawSceneIndicator() {
 // Key handlers
 function keyPressed() {
   if (key === 's') {
-    saveCanvas('crvab-promo', 'png');
+    saveCanvas('xiaov-promo', 'png');
   }
   if (key === 'r') {
     sceneIndex = 0; sceneTime = 0; totalTime = 0;
@@ -724,6 +724,6 @@ function keyPressed() {
   }
 }
 </script>
-<div id="info">科为博企业宣传片 · 按 [S] 截图 · [Space] 下一场景 · [R] 重播</div>
+<div id="info">xiaoV企业宣传片 · 按 [S] 截图 · [Space] 下一场景 · [R] 重播</div>
 </body>
 </html>

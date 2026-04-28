@@ -1,5 +1,5 @@
 # =============================================================================
-# 科为博工厂数字化项目 — Grafana 数据源自动配置
+# xiaoV Factory数字化项目 — Grafana 数据源自动配置
 # 自动连接 Prometheus，无需手动配置
 # =============================================================================
 
@@ -12,7 +12,7 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     editable: false
-    uid: crvab-prometheus
+    uid: xiaov-prometheus
     jsonData:
       timeInterval: 15s
       queryTimeout: 30s

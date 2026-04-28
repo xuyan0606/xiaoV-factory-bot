@@ -1,5 +1,5 @@
 """
-科为博工厂数字化项目 — Prometheus 指标采集模块
+xiaoV Factory数字化项目 — Prometheus 指标采集模块
 为 Flask 应用添加自定义监控指标，用于 Prometheus 抓取
 
 使用方式：

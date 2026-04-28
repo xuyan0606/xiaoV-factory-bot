@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工厂 — 时序数据异常检测
+xiaoV Factory — 时序数据异常检测
 纯 Python 实现：Z-Score / IQR / 移动平均 / 滑动窗口
 零外部依赖
 """
@@ -240,7 +240,7 @@ def simulate_sensor_data(normal_temp=36.0, anomaly_chance=0.05):
 # 示例
 if __name__ == '__main__':
     print("=" * 50)
-    print("  科为博工厂 · 时序异常检测系统")
+    print("  xiaoV Factory · 时序异常检测系统")
     print("=" * 50)
 
     monitor = AnomalyMonitor(window_size=50)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工业物联网 — MQTT 轻量级 Broker
+xiaoV工业物联网 — MQTT 轻量级 Broker
 纯Python实现，基于asyncio，零依赖。
 """
 import asyncio, struct, time, json, logging

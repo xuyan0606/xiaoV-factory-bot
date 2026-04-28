@@ -1,5 +1,5 @@
 """
-科为博 — 钉钉工厂机器人 v2.0（安全版）
+xiaoV — 钉钉工厂机器人 v2.0（安全版）
 基于真实工厂数据，在钉钉里直接查询生产、库存、设备等信息
 
 安全机制：
@@ -20,7 +20,7 @@ except Exception:
 
 # ==================== 安全配置 ====================
 # 【部署前必改】在钉钉机器人配置中设置一样的值
-DINGTALK_TOKEN = "crvab_factory_2026"
+DINGTALK_TOKEN = "xiaov_factory_2026"
 RATE_LIMIT = 10  # 每秒最大请求数
 
 # ==================== 钉钉群推送配置 ====================
@@ -110,7 +110,7 @@ def handle_query(content):
 
     # 帮助
     if q in ["帮助", "help", "?", "h"]:
-        return """🤖 科为博工厂机器人 · 命令指南
+        return """🤖 xiaoV Factory Bot · 命令指南
 
 📋 查车间     — 查看所有车间状态
 📋 查车间 名称 — 查看特定车间详情
@@ -224,7 +224,7 @@ def handle_query(content):
     # 打招呼
     if any(k in q for k in ["你好","hi","hello","在吗"]):
         running = sum(1 for w in FACTORY_DATA['车间'] if w['status']=='运行中')
-        return f'你好！我是科为博工厂机器人 🤖\n\n当前工厂状态:\n🟢 {running}/{len(FACTORY_DATA["车间"])} 车间运行中\n📊 {len(FACTORY_DATA["当前批次"])} 批生产中\n\n发送「帮助」查看我能做什么'
+        return f'你好！我是xiaoV Factory Bot 🤖\n\n当前工厂状态:\n🟢 {running}/{len(FACTORY_DATA["车间"])} 车间运行中\n📊 {len(FACTORY_DATA["当前批次"])} 批生产中\n\n发送「帮助」查看我能做什么'
 
     return '❌ 我不理解 "' + q + '"\n发送「帮助」查看可用命令'
 
@@ -267,7 +267,7 @@ def webhook():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"status": "ok", "factory": "内蒙古科为博生物科技", "version": "2.0"})
+    return jsonify({"status": "ok", "factory": "xiaoV Factory Bot", "version": "2.0"})
 
 
 @app.route('/push', methods=['POST'])
@@ -301,13 +301,13 @@ def push_to_group(title, content, msg_type="text"):
     import urllib.request, ssl, certifi
 
     if msg_type == "alert":
-        text = f"⚠️ {title}\n{content}\n\n科为博"
+        text = f"⚠️ {title}\n{content}\n\nxiaoV"
     elif msg_type == "report":
-        text = f"📊 {title}\n{content}\n\n科为博"
+        text = f"📊 {title}\n{content}\n\nxiaoV"
     elif msg_type == "success":
-        text = f"✅ {title}\n{content}\n\n科为博"
+        text = f"✅ {title}\n{content}\n\nxiaoV"
     else:
-        text = f"{title}\n{content}\n\n科为博"
+        text = f"{title}\n{content}\n\nxiaoV"
 
     payload = json.dumps({
         "msgtype": "text",
@@ -340,7 +340,7 @@ def push_to_group(title, content, msg_type="text"):
 def push_test():
     """测试推送：发送一条消息到钉钉群"""
     success = push_to_group(
-        "科为博工厂助手已上线 ✅",
+        "xiaoV Assistant已上线 ✅",
         "机器人配置成功！\n"
         f"时间: {time.strftime('%Y-%m-%d %H:%M')}\n"
         f"当前状态: 运行中\n"
@@ -364,7 +364,7 @@ def push_report():
         batch_info += f"\n🔹 {b['产品']} - {b['阶段']}"
 
     content = (
-        f"📋 科为博生产日报\n"
+        f"📋 xiaoV生产日报\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"🏭 车间: {running}/{total_ws} 运行中\n"
         f"📊 在产批次:{batch_info}\n"
@@ -380,13 +380,13 @@ def push_report():
 
 @app.route('/chat', methods=['GET'])
 def chat_page():
-    """科为博工厂查询助手 — 网页版"""
+    """xiaoV Factory Assistant — 网页版"""
     return """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>科为博工厂查询助手</title>
+<title>xiaoV Factory Assistant</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0a0a1a;color:#e8f0ff;font-family:'PingFang SC','Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column}
@@ -410,7 +410,7 @@ body{background:#0a0a1a;color:#e8f0ff;font-family:'PingFang SC','Microsoft YaHei
 </style>
 </head>
 <body>
-<div class="header"><h1>🔬 科为博工厂查询</h1><span class="badge">● 在线</span></div>
+<div class="header"><h1>🔬 xiaoV Factory查询</h1><span class="badge">● 在线</span></div>
 <div class="chat" id="chat"></div>
 <div class="sug" id="sug">
 <button onclick="q('帮助')">💡 帮助</button>
@@ -425,13 +425,13 @@ body{background:#0a0a1a;color:#e8f0ff;font-family:'PingFang SC','Microsoft YaHei
 <input id="inp" placeholder="输入命令..." onkeydown="if(event.key==='Enter')s()">
 <button onclick="s()">发送</button>
 </div>
-<div class="st"><span>基于真实工厂数据</span><span>内蒙古科为博生物科技</span></div>
+<div class="st"><span>基于真实工厂数据</span><span>xiaoV Factory Bot</span></div>
 <script>
-async function query(m){const r=await fetch('/dingtalk/webhook?token=crvab_factory_2026',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({msgtype:'text',text:{content:m}})});const d=await r.json();return d.text?.content||'(无响应)'}
-function add(c,u){const d=document.getElementById('chat'),div=document.createElement('div');div.className='msg '+(u?'u':'b');if(!u){const l=document.createElement('div');l.className='l';l.textContent='🤖 科为博工厂助手';div.appendChild(l)}const t=document.createElement('div');t.textContent=c;div.appendChild(t);d.appendChild(div);d.scrollTop=d.scrollHeight}
+async function query(m){const r=await fetch('/dingtalk/webhook?token=xiaov_factory_2026',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({msgtype:'text',text:{content:m}})});const d=await r.json();return d.text?.content||'(无响应)'}
+function add(c,u){const d=document.getElementById('chat'),div=document.createElement('div');div.className='msg '+(u?'u':'b');if(!u){const l=document.createElement('div');l.className='l';l.textContent='🤖 xiaoV Assistant';div.appendChild(l)}const t=document.createElement('div');t.textContent=c;div.appendChild(t);d.appendChild(div);d.scrollTop=d.scrollHeight}
 async function s(){const i=document.getElementById('inp'),m=i.value.trim();if(!m)return;i.value='';add(m,1);const r=await query(m);add(r,0)}
 function q(m){add(m,1);query(m).then(r=>add(r,0))}
-window.onload=()=>{setTimeout(()=>{add('你好！我是科为博工厂助手 🤖\\n\\n当前工厂状态:\\n🟢 10/10 车间运行中\\n📊 3 批生产中\\n\\n点击下方按钮或输入命令查询',0)},300)}
+window.onload=()=>{setTimeout(()=>{add('你好！我是xiaoV Assistant 🤖\\n\\n当前工厂状态:\\n🟢 10/10 车间运行中\\n📊 3 批生产中\\n\\n点击下方按钮或输入命令查询',0)},300)}
 </script>
 </body>
 </html>"""
@@ -447,8 +447,8 @@ if __name__ == '__main__':
 
     print("=" * 50)
     print("=" * 50)
-    print("  科为博 钉钉工厂机器人 v2.0")
-    print("  INNER MONGOLIA CRVAB BIO-TECHNOLOGY")
+    print("  xiaoV 钉钉工厂机器人 v2.0")
+    print("  xiaoV Factory Bot")
     print("=" * 50)
     print(f"\n  安全配置:")
     print(f"  Token: {DINGTALK_TOKEN}")

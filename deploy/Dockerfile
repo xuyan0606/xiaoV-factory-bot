@@ -1,11 +1,11 @@
 # =============================================================================
-# 科为博工厂数字化项目 — Flask 服务端 Docker 镜像
+# xiaoV Factory数字化项目 — Flask 服务端 Docker 镜像
 # 基于 python:3.11-slim，轻量安全
 # =============================================================================
 FROM python:3.11-slim
 
-LABEL maintainer="科为博数字化团队 <dev@crvab.com>"
-LABEL description="科为博工厂机器人 Flask 服务端"
+LABEL maintainer="xiaoV Team <dev@xiaov.io>"
+LABEL description="xiaoV Factory Bot Flask 服务端"
 LABEL version="2.0"
 
 # 环境变量

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-科为博工业物联网 — MQTT 模拟数据源
+xiaoV工业物联网 — MQTT 模拟数据源
 模拟3个发酵罐的传感器数据，发布到MQTT Broker
 """
 import asyncio, json, random, time, struct, logging
