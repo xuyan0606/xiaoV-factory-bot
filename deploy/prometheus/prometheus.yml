@@ -1,0 +1,81 @@
+# =============================================================================
+# 科为博工厂数字化项目 — Prometheus 抓取配置
+# 采集 Flask 应用指标、MQTT Broker、Node Exporter 主机指标
+# =============================================================================
+
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  scrape_timeout:      10s
+
+  # 外部标签，用于区分不同环境
+  external_labels:
+    environment: production
+    project: crvab-factory
+    region: inner-mongolia
+
+# Alertmanager 配置（告警管理）
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# 告警规则
+rule_files:
+  # - "alerts.yml"
+
+# 抓取配置
+scrape_configs:
+
+  # ==================== Flask 应用指标 ====================
+  - job_name: 'flask-app'
+    scrape_interval: 15s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['flask-app:5001']
+        labels:
+          service: factory-bot
+          component: flask-server
+
+  # ==================== MQTT Broker 指标 ====================
+  - job_name: 'mqtt-broker'
+    scrape_interval: 30s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['mqtt-broker:1883']
+        labels:
+          service: mqtt-broker
+          component: messaging
+    # 如果 Mosquitto 没有原生 /metrics，使用 exporter
+    # 替代方案：通过 prometheus-mosquitto-exporter 抓取
+    # static_configs:
+    #   - targets: ['mqtt-exporter:9234']
+
+  # ==================== Node Exporter（主机指标） ====================
+  - job_name: 'node-exporter'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: host-metrics
+          component: infrastructure
+
+  # ==================== 自定义目标（可扩展） ====================
+  - job_name: 'factory-custom'
+    scrape_interval: 15s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['flask-app:5001']
+        labels:
+          service: custom-metrics
+          component: factory-sensors
+
+  # ==================== Prometheus 自身 ====================
+  - job_name: 'prometheus'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: monitoring
+          component: prometheus-self

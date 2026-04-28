@@ -1,0 +1,21 @@
+# =============================================================================
+# 科为博工厂数字化项目 — Grafana 数据源自动配置
+# 自动连接 Prometheus，无需手动配置
+# =============================================================================
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    uid: crvab-prometheus
+    jsonData:
+      timeInterval: 15s
+      queryTimeout: 30s
+      httpMethod: POST
+      prometheusType: Prometheus
+      prometheusVersion: 2.53.0

@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>科为博虚拟工厂 — 3D 交互展示</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body {
+    background: #050510;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh; overflow: hidden;
+    font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  canvas { display: block; }
+  #info {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,0.25);
+    font-size: 11px; text-align: center; pointer-events: none; z-index: 10;
+    letter-spacing: 1px;
+  }
+  #detailPanel {
+    position: fixed; right: 30px; top: 50%; transform: translateY(-50%);
+    width: 260px; background: rgba(5,5,16,0.85);
+    border: 1px solid rgba(0,212,255,0.2);
+    border-radius: 8px; padding: 20px;
+    color: #e8f0ff; z-index: 20;
+    opacity: 0; transition: opacity 0.4s;
+    backdrop-filter: blur(10px);
+    pointer-events: none;
+  }
+  #detailPanel.show { opacity: 1; }
+  #detailPanel h3 {
+    color: #00d4ff; font-size: 16px; margin: 0 0 8px 0;
+    border-bottom: 1px solid rgba(0,212,255,0.2);
+    padding-bottom: 8px;
+  }
+  #detailPanel .info-row {
+    display: flex; justify-content: space-between;
+    padding: 4px 0; font-size: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  #detailPanel .info-row .label { color: rgba(255,255,255,0.5); }
+  #detailPanel .info-row .value { color: #00ff88; }
+  #detailPanel .desc {
+    font-size: 12px; color: rgba(255,255,255,0.6);
+    margin-top: 10px; line-height: 1.6;
+  }
+  #detailPanel .close {
+    position: absolute; right: 12px; top: 12px;
+    color: rgba(255,255,255,0.3); cursor: pointer;
+    font-size: 18px; pointer-events: auto;
+  }
+  #detailPanel .close:hover { color: #fff; }
+  #tooltip {
+    position: fixed; z-index: 15;
+    background: rgba(0,0,0,0.8);
+    border: 1px solid rgba(0,212,255,0.3);
+    border-radius: 4px; padding: 6px 12px;
+    color: #fff; font-size: 12px;
+    pointer-events: none; opacity: 0;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  #tooltip.show { opacity: 1; }
+</style>
+<script>p5 = { disableFriendlyErrors: true };</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+</head>
+<body>
+
+<div id="detailPanel">
+  <span class="close" onclick="hidePanel()">&times;</span>
+  <h3 id="panelTitle">车间名称</h3>
+  <div id="panelInfo"></div>
+  <div class="desc" id="panelDesc">描述</div>
+</div>
+<div id="tooltip"></div>
+
+<script>
+// ================================================================
+// 内蒙古科为博生物科技 — 虚拟工厂 3D 展示
+// INNER MONGOLIA CRVAB BIO-TECHNOLOGY CO., LTD
+// ================================================================
+
+// ---- 配色 ----
+const COL = {
+  bg:       '#050510',
+  ground:   [8, 8, 24],
+  cyan:     [0, 212, 255],
+  green:    [0, 255, 136],
+  purple:   [124, 58, 237],
+  gold:     [255, 200, 50],
+  white:    [232, 240, 255],
+  gray:     [140, 150, 180],
+  red:      [255, 80, 80],
+};
+
+// ---- 建筑数据 (基于真实厂区布局) ----
+const BUILDINGS = [
+  {
+    id: 'ferment1', label: '发酵车间\n一期',
+    x: -8, z: -2, w: 4, d: 3, h: 2.8,
+    color: COL.cyan,
+    status: '运行中',
+    process: '菌种扩培·发酵',
+    params: { 罐容: '50m³×12', 温度: '37°C', pH: '6.0-6.7', 罐压: '0.05MPa' },
+    desc: '酶制剂与益生菌发酵生产，配备DCS自动控制系统。15B液体酶主发酵工段。',
+    detail: '一级种子罐→二级种子罐→三级发酵罐',
+  },
+  {
+    id: 'ferment2', label: '发酵车间\n二期',
+    x: -8, z: 4, w: 3.5, d: 3, h: 2.5,
+    color: COL.cyan,
+    status: '建设中',
+    process: '产能扩建',
+    params: { 罐容: '100m³×8', 状态: '设备安装', 预计: '2025Q3' },
+    desc: '二期发酵车间，扩建产能，新增100m³发酵罐。',
+    detail: '扩产项目，投产后产能翻倍',
+  },
+  {
+    id: 'extract1', label: '提取车间\n一期',
+    x: -2, z: -2, w: 3.5, d: 3, h: 2.6,
+    color: COL.green,
+    status: '运行中',
+    process: '絮凝·粗滤·精滤·超滤',
+    params: { 粗滤: '<5EBC', 精滤: '<1EBC', 温度: '60-65°C', 超滤: '0.4-0.8MPa' },
+    desc: '发酵液后处理提取车间。板框压滤+硅藻土精滤+超滤膜浓缩系统。',
+    detail: '含预涂罐、板框压滤机、超滤膜系统',
+  },
+  {
+    id: 'extract2', label: '提取车间\n二期',
+    x: -2, z: 4, w: 3, d: 3, h: 2.3,
+    color: COL.green,
+    status: '规划中',
+    process: '提取产线扩建',
+    params: { 状态: '规划设计', 产线: '新增超滤膜' },
+    desc: '二期提取车间扩建项目。',
+    detail: '增加超滤膜系统及自动化灌装线',
+  },
+  {
+    id: 'dry', label: '干燥塔\n1/2/3号',
+    x: 4, z: -3, w: 2.5, d: 2.5, h: 3.2,
+    color: COL.purple,
+    status: '运行中',
+    process: '喷雾干燥·制粉',
+    params: { 型号: '3座', 产品: '酶粉', 温度: '进风180°C' },
+    desc: '喷雾干燥塔，将液体酶制剂干燥为粉状成品。',
+    detail: '3座喷雾干燥塔并行运行',
+  },
+  {
+    id: 'mix', label: '混合车间',
+    x: 4, z: 2, w: 2.5, d: 2.5, h: 2.2,
+    color: COL.gold,
+    status: '运行中',
+    process: '混合·调配',
+    params: { 设备: '混合机×4', 产品: '复合酶' },
+    desc: '酶制剂复配混合车间，按配方进行产品调配。',
+    detail: '多品种酶制剂复配生产线',
+  },
+  {
+    id: 'warehouse', label: '仓储\n库房',
+    x: 10, z: 0, w: 3, d: 4, h: 2.8,
+    color: COL.cyan,
+    status: '运行中',
+    process: '成品·原料存储',
+    params: { 面积: '2000m²', 温控: '4°C冷库', 容量: '5000吨' },
+    desc: '原料库与成品库，配备冷库存储益生菌及液体酶。',
+    detail: '常温库+冷库，ERP库存管理',
+  },
+  {
+    id: 'air', label: '空压间',
+    x: -12, z: -2, w: 2, d: 2, h: 1.8,
+    color: COL.gray,
+    status: '运行中',
+    process: '压缩空气供应',
+    params: { 设备: '离心空压机', 型号: '200m³/350m³' },
+    desc: '为全厂提供无菌压缩空气。配备200m³和350m³离心空压机。',
+    detail: '两级过滤除油，提供洁净空气',
+  },
+  {
+    id: 'power', label: '变电室',
+    x: -12, z: 3, w: 1.5, d: 1.5, h: 1.5,
+    color: COL.gray,
+    status: '运行中',
+    process: '电力供应',
+    params: { 容量: '10kV', 备用: '柴油发电机' },
+    desc: '全厂电力分配与控制中心。',
+    detail: '双回路供电+应急发电',
+  },
+  {
+    id: 'sewage', label: '污水处理池',
+    x: 2, z: 6, w: 3, d: 1.5, h: 1.2,
+    color: COL.gray,
+    status: '运行中',
+    process: '废水处理',
+    params: { 重度: '物化处理', 轻度: '生化处理' },
+    desc: '厂区污水处理系统，分为重度和轻度污水处理池。',
+    detail: '达标排放，环保合规',
+  },
+  {
+    id: 'control', label: '中控中心',
+    x: -3, z: -7, w: 2.5, d: 2, h: 1.8,
+    color: COL.purple,
+    status: '运行中',
+    process: 'DCS·SCADA·MES',
+    params: { 系统: 'DCS中控', 监控: '全厂覆盖', 升级: '数据存储' },
+    desc: '全厂生产控制与数据采集中心。目前DCS已部署，正在进行历史数据存储升级。',
+    detail: '数字化转型核心中枢',
+  },
+  {
+    id: 'qc', label: '质检中心',
+    x: 6, z: -6, w: 2, d: 2, h: 1.8,
+    color: COL.gold,
+    status: '运行中',
+    process: '质量检测·留样',
+    params: { 检测: '酶活·浊度·pH', 留样: '4°C/常温/老化' },
+    desc: '产品质量检测与留样管理。检测酶活、浊度、微生物指标。',
+    detail: '每批次全项检测',
+  },
+  {
+    id: 'granule', label: '制粒车间',
+    x: 7, z: 4, w: 2, d: 2, h: 2,
+    color: COL.green,
+    status: '运行中',
+    process: '制粒·包装',
+    params: { 产品: '颗粒制剂', 包装: '自动包装线' },
+    desc: '酶制剂与益生菌颗粒产品生产线。',
+    detail: '制粒+干燥+自动包装',
+  },
+];
+
+// ---- 生产流程连线（车间间的物料流向） ----
+const FLOWS = [
+  { from: 'air',     to: 'ferment1', label: '洁净空气' },
+  { from: 'ferment1', to: 'ferment2', label: '种子扩培' },
+  { from: 'ferment1', to: 'extract1', label: '发酵液' },
+  { from: 'ferment2', to: 'extract2', label: '发酵液' },
+  { from: 'extract1', to: 'dry',      label: '浓缩液' },
+  { from: 'extract1', to: 'mix',      label: '液酶' },
+  { from: 'dry',      to: 'mix',      label: '酶粉' },
+  { from: 'mix',      to: 'warehouse', label: '成品' },
+  { from: 'extract2', to: 'warehouse', label: '成品' },
+  { from: 'sewage',   to: '',         label: '排水' },
+  { from: 'control',  to: 'ferment1', label: 'DCS控制' },
+  { from: 'control',  to: 'extract1', label: 'DCS控制' },
+  { from: 'qc',       to: 'warehouse', label: '质检放行' },
+];
+
+// ---- 全局状态 ----
+let W, H;
+let camAngle = 0;
+let camDist = 30;
+let targetAngle = 0;
+let targetDist = 30;
+let camHeight = 12;
+let targetHeight = 12;
+let isAutoRotate = true;
+let mouseDown = false;
+let lastMouseX, lastMouseY;
+let selectedBuilding = null;
+let hoveredBuilding = null;
+let flowParticles = [];
+let particles = [];
+
+// ---- 缓动 ----
+function lerp(a, b, t) { return a + (b-a)*t; }
+function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
+
+// ---- 流粒子 ----
+class FlowParticle {
+  constructor(flow) {
+    this.flow = flow;
+    this.progress = random(1);
+    this.speed = 0.003 + random(0.002);
+    this.size = random(1.5, 3);
+  }
+  update() {
+    this.progress += this.speed;
+    if(this.progress > 1) this.progress = 0;
+  }
+  getPos() {
+    let f = this.flow;
+    let fromB = BUILDINGS.find(b => b.id === f.from);
+    let toB  = BUILDINGS.find(b => b.id === f.to);
+    if(!fromB || !toB) return null;
+    let p = this.progress;
+    // 弧线路径
+    let x1 = fromB.x, z1 = fromB.z;
+    let x2 = toB.x, z2 = toB.z;
+    let mx = (x1+x2)/2, mz = (z1+z2)/2;
+    let arcH = 0.8;
+    let t = p;
+    let x = lerp(x1, x2, t);
+    let z = lerp(z1, z2, t);
+    let y = sin(t * PI) * arcH + 0.5;
+    return { x, y, z };
+  }
+}
+
+// ---- 背景粒子 ----
+class BgParticle3D {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = random(-40, 40);
+    this.z = random(-40, 40);
+    this.y = random(-5, 20);
+    this.sz = random(0.5, 1.5);
+    this.phase = random(TWO_PI);
+    this.spd = random(0.01, 0.03);
+  }
+  update(t) {
+    this.y += sin(t*0.2 + this.phase)*0.005;
+    this.x += this.spd * 0.1;
+    if(this.x > 45) this.x = -45;
+  }
+}
+
+// ---- 坐标系转换（3D世界→屏幕） ----
+function worldToScreen(wx, wy, wz) {
+  // 简易透视投影
+  let rot = camAngle;
+  let cosA = cos(rot), sinA = sin(rot);
+  let dx = wx * cosA - wz * sinA;
+  let dz = wx * sinA + wz * cosA;
+  let dy = wy - camHeight;
+  let scale = 400 / (dz + camDist);
+  let sx = W/2 + dx * scale * 8;
+  let sy = H/2 - dy * scale * 8;
+  return { x: sx, y: sy, s: scale };
+}
+
+// ---- 查找最近建筑（鼠标点击/悬停） ----
+function getBuildingAt(mx, my) {
+  let best = null, bestDist = 30;
+  for(let b of BUILDINGS) {
+    let cx = b.x, cz = b.z;
+    let screen = worldToScreen(cx, 0, cz);
+    let d = dist(mx, my, screen.x, screen.y);
+    if(d < bestDist) {
+      bestDist = d;
+      best = b;
+    }
+  }
+  return best;
+}
+
+// ================================================================
+// SETUP
+// ================================================================
+function setup() {
+  W = windowWidth;
+  H = windowHeight;
+  createCanvas(W, H, WEBGL);
+  pixelDensity(1);
+  colorMode(RGB, 255);
+  frameRate(30);
+
+  // 初始化流粒子
+  for(let f of FLOWS) {
+    if(f.to) {
+      for(let i=0; i<6; i++) flowParticles.push(new FlowParticle(f));
+    }
+  }
+
+  // 初始化背景粒子
+  for(let i=0; i<80; i++) particles.push(new BgParticle3D());
+
+  // 默认选中
+  selectedBuilding = BUILDINGS[0];
+  updatePanel(selectedBuilding);
+
+  describe('科为博虚拟工厂 — 鼠标拖拽旋转·滚轮缩放·点击查看车间详情');
+}
+
+function draw() {
+  // 背景
+  background(5, 5, 16);
+
+  // 相机控制
+  if(isAutoRotate && !mouseDown) {
+    targetAngle += 0.002;
+  }
+  camAngle = lerp(camAngle, targetAngle, 0.05);
+  camDist = lerp(camDist, targetDist, 0.08);
+  camHeight = lerp(camHeight, targetHeight, 0.08);
+
+  // 设置相机
+  let cx = sin(camAngle) * camDist;
+  let cz = cos(camAngle) * camDist;
+  camera(cx*3, camHeight*2, cz*3, 0, 0, 0, 0, 1, 0);
+  ambientLight(20, 20, 40);
+  directionalLight(100, 120, 180, 0.5, -1, -0.5);
+  directionalLight(60, 80, 100, -0.3, 0.5, 0.3);
+  pointLight(0, 100, 200, 0, 0, 10);
+
+  // ---- 地面 ----
+  push();
+  noStroke();
+  fill(COL.ground[0], COL.ground[1], COL.ground[2]);
+  // 主地面
+  push();
+  translate(0, -0.05, 0);
+  rotateX(-PI/2);
+  fill(8, 8, 28);
+  plane(45, 45);
+  pop();
+
+  // 网格（发光线条）
+  stroke(COL.cyan[0], COL.cyan[1], COL.cyan[2], 15);
+  strokeWeight(0.3);
+  for(let i=-20; i<=20; i+=2) {
+    line(i, 0, -20, i, 0, 20);
+    line(-20, 0, i, 20, 0, i);
+  }
+  pop();
+
+  // ---- 更新流粒子 ----
+  for(let p of flowParticles) p.update();
+
+  // ---- 绘制流程管线 ----
+  push();
+  for(let f of FLOWS) {
+    if(!f.to) continue;
+    let fromB = BUILDINGS.find(b => b.id === f.from);
+    let toB = BUILDINGS.find(b => b.id === f.to);
+    if(!fromB || !toB) continue;
+    let fx = fromB.x, fz = fromB.z;
+    let tx = toB.x, tz = toB.z;
+
+    // 弧线管道路径
+    let mx = (fx+tx)/2, mz = (fz+tz)/2;
+    let arcH = 1.2;
+    noFill();
+    stroke(COL.cyan[0], COL.cyan[1], COL.cyan[2], 20);
+    strokeWeight(0.3);
+
+    // 绘制贝塞尔曲线
+    beginShape();
+    let steps = 30;
+    for(let i=0; i<=steps; i++) {
+      let t = i/steps;
+      let x = lerp(fx, tx, t);
+      let z = lerp(fz, tz, t);
+      let y = sin(t * PI) * arcH;
+      vertex(x, y+0.3, z);
+    }
+    endShape();
+  }
+  pop();
+
+  // ---- 绘制流粒子 ----
+  push();
+  noStroke();
+  for(let p of flowParticles) {
+    let pos = p.getPos();
+    if(!pos) continue;
+    let c = COL.green;
+    let pulse = 0.6 + 0.4*sin(frameCount*0.1 + p.progress*10);
+    translate(pos.x, pos.y, pos.z);
+    fill(c[0], c[1], c[2], 180 * pulse);
+    sphere(p.size * 0.3);
+    fill(c[0], c[1], c[2], 30 * pulse);
+    sphere(p.size * 0.7);
+    translate(-pos.x, -pos.y, -pos.z);
+  }
+  pop();
+
+  // ---- 绘制建筑 ----
+  for(let b of BUILDINGS) {
+    drawBuilding(b);
+  }
+
+  // ---- 建筑标签（Sprite 文字） ----
+  push();
+  for(let b of BUILDINGS) {
+    let isHover = hoveredBuilding === b;
+    let isSelected = selectedBuilding === b;
+    let labelY = b.h + 1.2;
+    let finalY = labelY + (isHover ? 0.3 : 0);
+
+    // 标签背景
+    push();
+    translate(b.x, finalY, b.z);
+    noStroke();
+    fill(0, 0, 0, 150);
+    box(b.w*0.6, 0.3, 0.1);
+    pop();
+
+    // 标签文字（始终面向相机）
+    push();
+    translate(b.x, finalY, b.z);
+    noStroke();
+    let alpha = isHover ? 255 : isSelected ? 220 : 180;
+    fill(255, 255, 255, alpha);
+    textFont('PingFang SC, sans-serif');
+    textSize(0.6);
+    textAlign(CENTER, CENTER);
+    text(b.label.replace('\n', ' '), 0, 0.05, b.w*1.5);
+    pop();
+  }
+  pop();
+
+  // ---- 顶部HUD ----
+  drawHUD();
+
+  // ---- 更新3D背景粒子 ----
+  push();
+  noStroke();
+  for(let p of particles) {
+    p.update(frameCount);
+    fill(COL.cyan[0], COL.cyan[1], COL.cyan[2], 10);
+    translate(p.x, p.y, p.z);
+    sphere(p.sz * 0.1);
+    translate(-p.x, -p.y, -p.z);
+  }
+  pop();
+}
+
+// ---- 绘制单个建筑 ----
+function drawBuilding(b) {
+  push();
+  translate(b.x, b.h/2, b.z);
+
+  let isHover = hoveredBuilding === b;
+  let isSel = selectedBuilding === b;
+  let pulse = isHover || isSel;
+  let scale = pulse ? 1.04 : 1.0;
+  let c = b.color;
+  let bw = b.w * scale;
+  let bd = b.d * scale;
+  let bh = b.h * scale;
+
+  // 建筑主体
+  push();
+  noStroke();
+
+  // 发光边框
+  if(isSel) {
+    stroke(c[0], c[1], c[2], 60);
+    strokeWeight(0.03);
+    fill(c[0], c[1], c[2], 15);
+    box(bw+0.1, bh+0.1, bd+0.1);
+  }
+
+  // 主墙体
+  fill(c[0], c[1], c[2], 40 + (isHover ? 30 : 0));
+  stroke(c[0], c[1], c[2], 60 + (isHover ? 40 : 0));
+  strokeWeight(0.02);
+  box(bw, bh, bd);
+
+  // 屋顶发光线条
+  if(isSel || isHover) {
+    stroke(c[0], c[1], c[2], 80);
+    strokeWeight(0.02);
+    noFill();
+    // 屋顶轮廓
+    let hw = bw/2, hd = bd/2;
+    beginShape();
+    vertex(-hw, bh/2+0.01, -hd);
+    vertex( hw, bh/2+0.01, -hd);
+    vertex( hw, bh/2+0.01,  hd);
+    vertex(-hw, bh/2+0.01,  hd);
+    endShape(CLOSE);
+  }
+
+  // 状态指示灯
+  pop();
+
+  push();
+  translate(0, bh/2+0.02, 0);
+  let statusColor = b.status === '运行中' ? COL.green :
+                    b.status === '建设中' ? COL.gold : COL.gray;
+  noStroke();
+  fill(statusColor[0], statusColor[1], statusColor[2], 150);
+  sphere(0.08);
+  pop();
+
+  pop();
+}
+
+// ---- HUD ----
+function drawHUD() {
+  push();
+  resetMatrix();
+  // 左上角标题
+  noStroke();
+  fill(COL.white[0], COL.white[1], COL.white[2], 180);
+  textFont('PingFang SC, sans-serif');
+  textSize(14);
+  textAlign(LEFT, TOP);
+  text('科为博虚拟工厂 · VR Factory', 15, 12);
+
+  fill(COL.gray[0], COL.gray[1], COL.gray[2], 100);
+  textSize(10);
+  text('拖拽旋转 · 滚轮缩放 · 点击查看详情', 15, 32);
+
+  // 右上角统计
+  let running = BUILDINGS.filter(b => b.status === '运行中').length;
+  let total = BUILDINGS.length;
+  textAlign(RIGHT, TOP);
+  fill(COL.cyan[0], COL.cyan[1], COL.cyan[2], 150);
+  textSize(11);
+  text(`车间: ${running}/${total} 运行中`, W-15, 12);
+  fill(COL.gray[0], COL.gray[1], COL.gray[2], 80);
+  textSize(9);
+  text(`料流路径: ${FLOWS.length} 条`, W-15, 28);
+
+  pop();
+}
+
+// ---- UI 面板更新 ----
+function updatePanel(b) {
+  let title = document.getElementById('panelTitle');
+  let info = document.getElementById('panelInfo');
+  let desc = document.getElementById('panelDesc');
+  let panel = document.getElementById('detailPanel');
+
+  if(!b) { panel.classList.remove('show'); return; }
+
+  title.textContent = b.label.replace('\n', ' ');
+  let html = '';
+  html += `<div class="info-row"><span class="label">状态</span><span class="value">${b.status}</span></div>`;
+  html += `<div class="info-row"><span class="label">工艺</span><span class="value">${b.process}</span></div>`;
+  for(let [k, v] of Object.entries(b.params)) {
+    html += `<div class="info-row"><span class="label">${k}</span><span class="value">${v}</span></div>`;
+  }
+  info.innerHTML = html;
+  desc.textContent = b.desc;
+  panel.classList.add('show');
+}
+
+function hidePanel() {
+  document.getElementById('detailPanel').classList.remove('show');
+  selectedBuilding = null;
+}
+
+// ---- 鼠标事件 ----
+function mousePressed() {
+  if(mouseX < 0 || mouseX > W || mouseY < 0 || mouseY > H) return;
+  // 检查是否点击到建筑
+  let b = getBuildingAt(mouseX, mouseY);
+  if(b) {
+    selectedBuilding = b;
+    updatePanel(b);
+  }
+  mouseDown = true;
+  lastMouseX = mouseX;
+  lastMouseY = mouseY;
+  isAutoRotate = false;
+}
+
+function mouseReleased() {
+  mouseDown = false;
+  setTimeout(() => { isAutoRotate = true; }, 3000);
+}
+
+function mouseDragged() {
+  if(!mouseDown) return;
+  let dx = mouseX - lastMouseX;
+  let dy = mouseY - lastMouseY;
+  targetAngle -= dx * 0.008;
+  targetHeight += dy * 0.05;
+  targetHeight = clamp(targetHeight, 3, 25);
+  lastMouseX = mouseX;
+  lastMouseY = mouseY;
+}
+
+function mouseMoved() {
+  let b = getBuildingAt(mouseX, mouseY);
+  hoveredBuilding = b;
+
+  let tip = document.getElementById('tooltip');
+  if(b) {
+    tip.textContent = b.label.replace('\n', ' ') + ' · ' + b.status;
+    tip.style.left = (mouseX+12) + 'px';
+    tip.style.top = (mouseY-8) + 'px';
+    tip.classList.add('show');
+  } else {
+    tip.classList.remove('show');
+  }
+}
+
+function mouseWheel(event) {
+  targetDist += event.delta * 0.03;
+  targetDist = clamp(targetDist, 8, 60);
+  return false;
+}
+
+function touchStarted() {
+  if(mouseX < 0 || mouseX > W || mouseY < 0 || mouseY > H) return;
+  let b = getBuildingAt(mouseX, mouseY);
+  if(b) {
+    selectedBuilding = b;
+    updatePanel(b);
+  }
+  mouseDown = true;
+  lastMouseX = mouseX;
+  lastMouseY = mouseY;
+  isAutoRotate = false;
+}
+
+function touchEnded() {
+  mouseDown = false;
+  setTimeout(() => { isAutoRotate = true; }, 3000);
+}
+
+function windowResized() {
+  W = windowWidth;
+  H = windowHeight;
+  resizeCanvas(W, H);
+}
+
+function keyPressed() {
+  if(key === 'r' || key === 'R') {
+    targetAngle = 0;
+    targetDist = 30;
+    targetHeight = 12;
+    isAutoRotate = true;
+  }
+  if(key === 'f' || key === 'F') {
+    let fs = fullscreen();
+    fullscreen(!fs);
+  }
+}
+</script>
+</body>
+</html>

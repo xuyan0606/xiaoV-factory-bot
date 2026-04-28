@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>科为博 — 科技赋能生物智造</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  canvas { display: block; }
+  #info {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,0.3); font-family: monospace; font-size: 12px;
+    text-align: center; pointer-events: none; z-index: 10;
+  }
+</style>
+<script>p5 = { disableFriendlyErrors: true };</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+</head>
+<body>
+<script>
+// ============================================================
+// 科为博 企业宣传片 — p5.js 动画
+// CRVAB — 科技赋能生物智造
+// ============================================================
+
+// ---- 配色 ----
+const C = {
+  bg:       '#0a0a1a',
+  cyan:     '#00d4ff',
+  green:    '#00ff88',
+  purple:   '#7c3aed',
+  white:    '#e8f0ff',
+  dim:      'rgba(255,255,255,0.15)',
+  darkDim:  'rgba(0,212,255,0.05)',
+};
+
+// ---- 场景 ----
+const SCENES = [
+  { name: 'logo',       dur: 8,  label: '企业标识' },
+  { name: 'molecules',  dur: 9,  label: '核心技术' },
+  { name: 'factory',    dur: 11, label: '智能制造' },
+  { name: 'products',   dur: 7,  label: '产品应用' },
+  { name: 'ending',     dur: 6,  label: '展望未来' },
+];
+
+// ---- 全局状态 ----
+let W, H;
+let particles = [];
+let sceneIndex = 0;
+let sceneTime = 0;
+let totalTime = 0;
+let bgCanvas, fgCanvas, glowCanvas;
+let fontMedium, fontLight;
+
+// ---- Perlin noise helpers ----
+let zOff = 0;
+
+function fbm(x, y, octaves = 3) {
+  let val = 0, amp = 1, freq = 1, sum = 0;
+  for (let i = 0; i < octaves; i++) {
+    val += noise(x * freq, y * freq) * amp;
+    sum += amp; amp *= 0.5; freq *= 2;
+  }
+  return val / sum;
+}
+
+// ---- Particle System ----
+class Particle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = random(-W * 0.1, W * 1.1);
+    this.y = random(-H * 0.1, H * 1.1);
+    this.vx = 0;
+    this.vy = random(-0.15, -0.05);
+    this.size = random(1, 2.5);
+    this.alpha = random(40, 120);
+    this.hueShift = random(TWO_PI);
+    this.baseX = this.x;
+    this.baseY = this.y;
+    this.noiseScale = random(0.003, 0.008);
+    this.noiseAmp = random(20, 60);
+    this.speed = random(0.2, 0.6);
+  }
+  update(t) {
+    let n = noise(this.x * this.noiseScale, this.y * this.noiseScale, zOff);
+    let angle = n * TWO_PI * 2;
+    this.vx += cos(angle) * 0.05;
+    this.vy += sin(angle) * 0.05 - 0.01;
+    this.vx *= 0.98;
+    this.vy *= 0.98;
+    this.x += this.vx * this.speed;
+    this.y += this.vy * this.speed;
+    if (this.y < -20) { this.y = H + 20; this.x = random(W); }
+    if (this.x < -20) this.x = W + 20;
+    if (this.x > W + 20) this.x = -20;
+  }
+  draw(buf, t) {
+    let bright = 0.5 + 0.5 * sin(t * 0.5 + this.hueShift);
+    let r = 0, g = 0, b = 0;
+    let mix = sin(t * 0.3 + this.hueShift) * 0.5 + 0.5;
+    if (mix < 0.5) {
+      let m = mix * 2;
+      r = lerp(0, 0, m); g = lerp(212, 255, m); b = lerp(255, 136, m);
+    } else {
+      let m = (mix - 0.5) * 2;
+      r = lerp(0, 124, m); g = lerp(255, 58, m); b = lerp(136, 237, m);
+    }
+    let a = this.alpha * bright * 0.6;
+    buf.noStroke();
+    buf.fill(r, g, b, a);
+    buf.circle(this.x, this.y, this.size);
+    buf.fill(r, g, b, a * 0.3);
+    buf.circle(this.x, this.y, this.size * 3);
+  }
+}
+
+// ---- Glowing Text ----
+function drawGlowText(buf, txt, x, y, size, color, glowColor, glowSize) {
+  buf.noStroke();
+  // outer glow
+  for (let i = glowSize; i > 0; i -= 2) {
+    let a = map(i, 0, glowSize, 0, 15);
+    buf.fill(red(glowColor), green(glowColor), blue(glowColor), a);
+    buf.textSize(size + i * 0.8);
+    buf.text(txt, x, y);
+  }
+  // main text
+  buf.fill(color);
+  buf.textSize(size);
+  buf.text(txt, x, y);
+}
+
+// ---- Scene: Logo Reveal ----
+function sceneLogo(buf, t, progress) {
+  // Background particles
+  buf.image(bgCanvas, 0, 0);
+
+  // DNA helix background
+  drawDNAHelix(buf, t * 0.3, 0.15);
+
+  // Main title
+  let titleY = H * 0.38;
+  let fadeIn = constrain(progress * 2, 0, 1);
+  let fadeIn2 = constrain((progress - 0.2) * 2.5, 0, 1);
+
+  buf.textAlign(CENTER, CENTER);
+  buf.textFont('monospace', 80);
+  buf.textStyle(BOLD);
+
+  // "CRVAB" glow title
+  let titleAlpha = fadeIn;
+  for (let i = 5; i > 0; i--) {
+    let a = map(i, 0, 5, 0, 20 * titleAlpha);
+    buf.fill(0, 212, 255, a);
+    buf.textSize(80 + i * 3);
+    buf.text('CRVAB', W/2, titleY);
+  }
+  buf.fill(0, 212, 255, 255 * titleAlpha);
+  buf.textSize(80);
+  buf.text('CRVAB', W/2, titleY);
+
+  // Subtitle
+  buf.textSize(22);
+  buf.textStyle(NORMAL);
+  buf.fill(232, 240, 255, 200 * fadeIn);
+  let subY = H * 0.52;
+  buf.text('内蒙古科为博生物科技有限公司', W/2, subY);
+
+  // Tagline - with typewriter effect
+  let tagline = '科技赋能生物智造';
+  let charCount = floor(fadeIn2 * tagline.length);
+  let taglineAlpha = fadeIn2 > 0.8 ? 1 : 0;
+  if (charCount > 0) {
+    buf.textSize(16);
+    buf.fill(0, 255, 136, 180 * taglineAlpha);
+    buf.text(tagline.slice(0, charCount), W/2, subY + 45);
+  }
+
+  // Animated underline
+  let lineW = lerp(0, 120, constrain((progress - 0.3) * 3, 0, 1));
+  if (lineW > 0) {
+    buf.stroke(0, 212, 255, 150);
+    buf.strokeWeight(1.5);
+    buf.line(W/2 - lineW/2, subY + 58, W/2 + lineW/2, subY + 58);
+  }
+}
+
+// ---- DNA Helix Background ----
+function drawDNAHelix(buf, t, alpha) {
+  buf.push();
+  buf.translate(W/2, H/2);
+  let segments = 40;
+  let radius = 180;
+  let heightSpan = 300;
+
+  buf.noFill();
+  for (let i = 0; i < segments; i++) {
+    let frac = i / segments;
+    let y = map(frac, 0, 1, -heightSpan/2, heightSpan/2);
+    let angle = frac * TWO_PI * 4 + t;
+    let x1 = cos(angle) * radius;
+    let x2 = cos(angle + PI) * radius;
+
+    let a = alpha * 40 * (1 - abs(frac * 2 - 1) * 0.5);
+    buf.stroke(0, 212, 255, a);
+    buf.strokeWeight(1);
+    buf.circle(x1, y, 3);
+    buf.circle(x2, y, 3);
+
+    // cross links
+    if (i % 3 === 0) {
+      buf.stroke(0, 255, 136, a * 0.5);
+      buf.strokeWeight(0.5);
+      buf.line(x1, y, x2, y);
+    }
+  }
+  buf.pop();
+}
+
+// ---- Scene: Molecules ----
+function sceneMolecules(buf, t, progress) {
+  buf.image(bgCanvas, 0, 0);
+
+  let fadeIn = constrain(progress * 1.5, 0, 1);
+  let fadeIn2 = constrain((progress - 0.4) * 2, 0, 1);
+
+  // Draw 3D-like molecular structures
+  buf.push();
+  buf.translate(W/2, H/2);
+
+  // Central molecule cluster
+  let rot = t * 0.2;
+  let numAtoms = 24;
+  let orbitR = 120;
+
+  // Orbit rings
+  buf.noFill();
+  buf.stroke(0, 212, 255, 30 * fadeIn);
+  buf.strokeWeight(0.5);
+  buf.ellipse(0, 0, orbitR * 2, orbitR * 0.6);
+  buf.ellipse(0, 0, orbitR * 1.6, orbitR * 1.6);
+  buf.ellipse(0, 0, orbitR * 0.6, orbitR * 2);
+
+  // Atoms
+  for (let i = 0; i < numAtoms; i++) {
+    let frac = i / numAtoms;
+    let angle = frac * TWO_PI + rot;
+    let r = orbitR + sin(frac * 5 + t) * 20;
+    let x = cos(angle) * r * 0.8;
+    let y = sin(angle * 0.7 + t * 0.3) * r * 0.8;
+
+    let isEnzyme = i % 3 === 0;
+    let c = isEnzyme ? [0, 255, 136] : [0, 212, 255];
+    let sz = isEnzyme ? 6 : 4;
+    let a = 180 * fadeIn * (0.6 + 0.4 * sin(i + t));
+
+    buf.noStroke();
+    buf.fill(c[0], c[1], c[2], a);
+    buf.circle(x, y, sz);
+    buf.fill(c[0], c[1], c[2], a * 0.15);
+    buf.circle(x, y, sz * 4);
+
+    // Bonds
+    if (i > 0) {
+      let prev = i - 1;
+      let pAngle = prev / numAtoms * TWO_PI + rot;
+      let pR = orbitR + sin(prev / numAtoms * 5 + t) * 20;
+      let px = cos(pAngle) * pR * 0.8;
+      let py = sin(pAngle * 0.7 + t * 0.3) * pR * 0.8;
+      if (dist(x, y, px, py) < 80) {
+        buf.stroke(255, 255, 255, 20 * fadeIn);
+        buf.strokeWeight(0.5);
+        buf.line(x, y, px, py);
+      }
+    }
+  }
+
+  buf.pop();
+
+  // Labels
+  buf.textAlign(CENTER, CENTER);
+  buf.textStyle(BOLD);
+
+  let labels = ['酶制剂 Enzymes', '益生菌 Probiotics', '生物发酵 Fermentation'];
+  let labelYs = [H * 0.28, H * 0.5, H * 0.72];
+  let labelCols = [
+    [0, 255, 136],
+    [0, 212, 255],
+    [124, 58, 237]
+  ];
+
+  for (let i = 0; i < 3; i++) {
+    let lf = constrain((progress - 0.15 - i * 0.12) * 4, 0, 1);
+    if (lf > 0) {
+      let x = W/2 + (i - 1) * 200;
+      let y = labelYs[i];
+      let a = 255 * lf;
+
+      // Icon dot
+      buf.noStroke();
+      buf.fill(labelCols[i][0], labelCols[i][1], labelCols[i][2], a * 0.4);
+      buf.circle(x, y - 30, 20);
+      buf.fill(labelCols[i][0], labelCols[i][1], labelCols[i][2], a * 0.15);
+      buf.circle(x, y - 30, 40);
+
+      buf.textSize(20);
+      buf.fill(232, 240, 255, a);
+      buf.text(labels[i], x, y);
+    }
+  }
+}
+
+// ---- Scene: Digital Factory ----
+function sceneFactory(buf, t, progress) {
+  buf.image(bgCanvas, 0, 0);
+
+  let fadeIn = constrain(progress * 1.2, 0, 1);
+  let fadeIn2 = constrain((progress - 0.3) * 2, 0, 1);
+
+  // Factory nodes layout
+  let nodes = [
+    { x: 0.20, y: 0.25, label: '发酵车间', color: C.cyan },
+    { x: 0.40, y: 0.45, label: '提取车间', color: C.green },
+    { x: 0.60, y: 0.25, label: '干燥车间', color: C.cyan },
+    { x: 0.80, y: 0.45, label: '仓储物流', color: C.green },
+    { x: 0.30, y: 0.65, label: '质检中心', color: C.purple },
+    { x: 0.55, y: 0.70, label: '中控中心', color: C.purple },
+    { x: 0.70, y: 0.80, label: '数据中心', color: C.cyan },
+  ];
+
+  // Data flow lines between nodes
+  let edges = [
+    [0, 1], [1, 2], [2, 3], [1, 4], [4, 5], [5, 6], [0, 5], [1, 5]
+  ];
+
+  buf.push();
+
+  // Draw data flow lines
+  for (let e of edges) {
+    let a = nodes[e[0]], b = nodes[e[1]];
+    let ax = a.x * W, ay = a.y * H;
+    let bx = b.x * W, by = b.y * H;
+
+    // Glow line
+    let flowOffset = (t * 60) % dist(ax, ay, bx, by);
+    let flowFrac = flowOffset / dist(ax, ay, bx, by);
+
+    buf.stroke(0, 212, 255, 25 * fadeIn);
+    buf.strokeWeight(1);
+    buf.line(ax, ay, bx, by);
+
+    // Data packet traveling along line
+    for (let p = 0; p < 3; p++) {
+      let packetFrac = ((t * 0.15 + p * 0.33) % 1);
+      let px = lerp(ax, bx, packetFrac);
+      let py = lerp(ay, by, packetFrac);
+      buf.noStroke();
+      buf.fill(0, 255, 136, 150 * fadeIn);
+      buf.circle(px, py, 4);
+      buf.fill(0, 255, 136, 30 * fadeIn);
+      buf.circle(px, py, 10);
+    }
+  }
+
+  // Draw nodes
+  for (let i = 0; i < nodes.length; i++) {
+    let n = nodes[i];
+    let nx = n.x * W, ny = n.y * H;
+    let nodeFade = constrain((progress - 0.05 - i * 0.03) * 5, 0, 1);
+    if (nodeFade <= 0) continue;
+
+    let color = n.color;
+    let c = color === C.cyan ? [0, 212, 255] :
+            color === C.green ? [0, 255, 136] : [124, 58, 237];
+
+    // Node glow
+    buf.noStroke();
+    buf.fill(c[0], c[1], c[2], 30 * nodeFade);
+    buf.circle(nx, ny, 40);
+    buf.fill(c[0], c[1], c[2], 80 * nodeFade);
+    buf.circle(nx, ny, 18);
+    buf.fill(c[0], c[1], c[2], 180 * nodeFade);
+    buf.circle(nx, ny, 8);
+
+    // Pulse
+    let pulse = 0.5 + 0.5 * sin(t * 2 + i);
+    buf.fill(c[0], c[1], c[2], 20 * pulse * nodeFade);
+    buf.circle(nx, ny, 50 + pulse * 20);
+
+    // Label
+    if (nodeFade > 0.5) {
+      buf.textAlign(CENTER, CENTER);
+      buf.textFont('monospace', 13);
+      buf.textStyle(NORMAL);
+      buf.fill(232, 240, 255, 200 * nodeFade);
+      buf.text(n.label, nx, ny + 32);
+    }
+  }
+
+  // Data overlay - sensor readings
+  let sensorData = [
+    { label: '温度', val: '36.5°C' },
+    { label: 'pH', val: '6.8' },
+    { label: '溶氧', val: '85%' },
+    { label: '罐压', val: '0.05MPa' },
+    { label: '转速', val: '220rpm' },
+  ];
+
+  if (fadeIn2 > 0) {
+    let sx = W * 0.1, sy = H * 0.1;
+    buf.textAlign(LEFT);
+    buf.textStyle(NORMAL);
+
+    // Panel background
+    buf.noStroke();
+    buf.fill(0, 10, 30, 150 * fadeIn2);
+    buf.rect(sx, sy, 160, sensorData.length * 28 + 20, 4);
+    buf.stroke(0, 212, 255, 40 * fadeIn2);
+    buf.strokeWeight(0.5);
+    buf.noFill();
+    buf.rect(sx, sy, 160, sensorData.length * 28 + 20, 4);
+
+    for (let i = 0; i < sensorData.length; i++) {
+      let d = sensorData[i];
+      let dy = sy + 18 + i * 28;
+      buf.textSize(11);
+      buf.fill(0, 212, 255, 150 * fadeIn2);
+      buf.text(d.label, sx + 10, dy);
+      buf.textAlign(RIGHT);
+      buf.fill(0, 255, 136, 180 * fadeIn2);
+      buf.text(d.val, sx + 150, dy);
+      buf.textAlign(LEFT);
+    }
+  }
+
+  // Right panel - system status
+  let statusItems = ['DCS 数据采集', 'MES 质量追溯', 'SCADA 实时监控', '智能预警系统'];
+  if (fadeIn2 > 0) {
+    let px = W * 0.75, py = H * 0.7;
+    for (let i = 0; i < statusItems.length; i++) {
+      let itemFade = constrain((fadeIn2 - 0.1 - i * 0.06) * 5, 0, 1);
+      if (itemFade > 0) {
+        buf.textAlign(LEFT);
+        buf.textSize(13);
+        let iconX = px, iconY = py + i * 32;
+        buf.noStroke();
+        buf.fill(0, 255, 136, 150 * itemFade);
+        buf.circle(iconX + 4, iconY, 5);
+        buf.fill(232, 240, 255, 200 * itemFade);
+        buf.text(statusItems[i], iconX + 18, iconY + 4);
+
+        // Checkmark animation
+        let checkProgress = constrain((itemFade - 0.3) * 3, 0, 1);
+        if (checkProgress > 0) {
+          buf.stroke(0, 255, 136, 200 * checkProgress);
+          buf.strokeWeight(2);
+          buf.line(iconX - 2, iconY, iconX + 1, iconY + 4);
+          buf.line(iconX + 1, iconY + 4, iconX + 6, iconY - 2);
+        }
+      }
+    }
+  }
+
+  buf.pop();
+
+  // Top title
+  buf.textAlign(CENTER, TOP);
+  buf.textStyle(BOLD);
+  buf.textFont('monospace', 24);
+  let titleFade = fadeIn;
+  buf.fill(232, 240, 255, 200 * titleFade);
+  buf.text('数字化智能制造平台', W/2, 30);
+  buf.noFill();
+  buf.stroke(0, 212, 255, 50 * titleFade);
+  buf.strokeWeight(1);
+  buf.line(W/2 - 150, 60, W/2 + 150, 60);
+}
+
+// ---- Scene: Products ----
+function sceneProducts(buf, t, progress) {
+  buf.image(bgCanvas, 0, 0);
+
+  let fadeIn = constrain(progress * 1.5, 0, 1);
+
+  // 3 products floating
+  let products = [
+    { x: 0.2, y: 0.5, emoji: '🧪', label: '液体酶制剂', sub: '饲料·食品·纺织', color: [0, 255, 136] },
+    { x: 0.5, y: 0.5, emoji: '🔬', label: '益生菌菌粉', sub: '医药·保健·畜牧', color: [0, 212, 255] },
+    { x: 0.8, y: 0.5, emoji: '⚗️', label: '生物发酵产品', sub: '工业酶·添加剂', color: [124, 58, 237] },
+  ];
+
+  buf.textAlign(CENTER, CENTER);
+  buf.textStyle(NORMAL);
+
+  for (let i = 0; i < products.length; i++) {
+    let p = products[i];
+    let pf = constrain((fadeIn - 0.1 - i * 0.1) * 3, 0, 1);
+    if (pf <= 0) continue;
+
+    let px = p.x * W + sin(t * 0.5 + i * 2) * 15;
+    let py = p.y * H + cos(t * 0.7 + i * 1.5) * 10;
+    let c = p.color;
+
+    // Glow ring
+    buf.noStroke();
+    buf.fill(c[0], c[1], c[2], 20 * pf);
+    buf.circle(px, py - 20, 100);
+    buf.fill(c[0], c[1], c[2], 40 * pf);
+    buf.circle(px, py - 20, 60);
+
+    // Center icon (geometric)
+    buf.fill(c[0], c[1], c[2], 200 * pf);
+    buf.circle(px, py - 20, 30);
+    buf.fill(10, 10, 30, 200 * pf);
+    buf.circle(px, py - 20, 18);
+    buf.fill(c[0], c[1], c[2], 220 * pf);
+    buf.circle(px, py - 20, 10);
+
+    // Rotating particle ring
+    for (let j = 0; j < 12; j++) {
+      let a = j / 12 * TWO_PI + t * 0.8 + i * 1.2;
+      let r = 40 + sin(t * 1.2 + j) * 8;
+      let rx = px + cos(a) * r;
+      let ry = py - 20 + sin(a) * r;
+      buf.fill(c[0], c[1], c[2], 100 * pf);
+      buf.circle(rx, ry, 3);
+    }
+
+    // Label
+    let labelY = py + 40;
+    buf.textFont('monospace', 16);
+    buf.textStyle(BOLD);
+    buf.fill(232, 240, 255, 220 * pf);
+    buf.text(p.label, px, labelY);
+    buf.textFont('monospace', 12);
+    buf.textStyle(NORMAL);
+    buf.fill(c[0], c[1], c[2], 150 * pf);
+    buf.text(p.sub, px, labelY + 24);
+  }
+
+  // Bottom tagline
+  buf.textAlign(CENTER, BOTTOM);
+  let tagFade = constrain((fadeIn - 0.5) * 3, 0, 1);
+  if (tagFade > 0) {
+    buf.textFont('monospace', 14);
+    buf.fill(232, 240, 255, 120 * tagFade);
+    buf.text('—— 以科技创新驱动绿色生物制造 ——', W/2, H - 30);
+  }
+}
+
+// ---- Scene: Ending ----
+function sceneEnding(buf, t, progress) {
+  buf.image(bgCanvas, 0, 0);
+
+  let fadeIn = constrain(progress * 1.5, 0, 1);
+  let fadeIn2 = constrain((progress - 0.3) * 2.5, 0, 1);
+
+  // Particles converging to center
+  buf.textAlign(CENTER, CENTER);
+  buf.textStyle(BOLD);
+
+  // Large CRVAB logo
+  let logoY = H * 0.38;
+  let s = 100 + sin(t * 0.5) * 2;
+
+  for (let i = 5; i > 0; i--) {
+    let a = map(i, 0, 5, 0, 15 * fadeIn);
+    buf.fill(0, 212, 255, a);
+    buf.textSize(s + i * 4);
+    buf.text('CRVAB', W/2, logoY);
+  }
+  buf.fill(0, 212, 255, 255 * fadeIn);
+  buf.textSize(s);
+  buf.text('CRVAB', W/2, logoY);
+
+  // Subtitle
+  buf.textSize(18);
+  buf.textStyle(NORMAL);
+  buf.fill(232, 240, 255, 200 * fadeIn);
+  buf.text('内蒙古科为博生物科技有限公司', W/2, logoY + 50);
+
+  // Slogan
+  if (fadeIn2 > 0) {
+    let slogan = '以科技驱动绿色未来';
+    buf.textFont('monospace', 28);
+    buf.textStyle(BOLD);
+    buf.fill(0, 255, 136, 220 * fadeIn2);
+    buf.text(slogan, W/2, H * 0.65);
+  }
+
+  // Bottom line
+  if (fadeIn2 > 0.5) {
+    let bf = constrain((fadeIn2 - 0.5) * 3, 0, 1);
+    buf.textFont('monospace', 12);
+    buf.textStyle(NORMAL);
+    buf.fill(232, 240, 255, 100 * bf);
+    buf.text('科技赋能生物智造 · 数字化转型进行时', W/2, H * 0.82);
+  }
+
+  // Subtle particles fading out
+  for (let i = 0; i < 50; i++) {
+    let a = random(TWO_PI);
+    let r = random(50, 300) * (1 - fadeIn * 0.5);
+    let px = W/2 + cos(a + t * 0.1) * r;
+    let py = H * 0.38 + sin(a * 0.7 + t * 0.08) * r * 0.5;
+    buf.noStroke();
+    buf.fill(0, 212, 255, 30 * fadeIn * (1 - r/300));
+    buf.circle(px, py, 1.5);
+  }
+}
+
+// ============================================================
+// MAIN SETUP
+// ============================================================
+function setup() {
+  W = 1920;
+  H = 1080;
+  createCanvas(W, H);
+  pixelDensity(1);
+  colorMode(RGB, 255);
+  frameRate(30);
+
+  // Initialize background canvas
+  bgCanvas = createGraphics(W, H);
+  fgCanvas = createGraphics(W, H);
+
+  // Create ambient particles
+  for (let i = 0; i < 80; i++) {
+    particles.push(new Particle());
+  }
+
+  // Background grid
+  bgCanvas.noFill();
+  bgCanvas.stroke(255, 255, 255, 5);
+  bgCanvas.strokeWeight(0.5);
+  for (let x = 0; x < W; x += 80) {
+    bgCanvas.line(x, 0, x, H);
+  }
+  for (let y = 0; y < H; y += 80) {
+    bgCanvas.line(0, y, W, y);
+  }
+}
+
+function draw() {
+  let dt = 1 / 30;
+  totalTime += dt;
+  sceneTime += dt;
+  zOff += 0.003;
+
+  // Update current scene
+  let current = SCENES[sceneIndex];
+  let progress = sceneTime / current.dur;
+
+  // Check scene transition
+  if (progress >= 1) {
+    sceneIndex = (sceneIndex + 1) % SCENES.length;
+    sceneTime = 0;
+    progress = 0;
+  }
+
+  // Update background particles
+  for (let p of particles) {
+    p.update(totalTime);
+  }
+
+  // Draw background layer
+  bgCanvas.noStroke();
+  bgCanvas.fill(10, 10, 26, 5);
+  bgCanvas.rect(0, 0, W, H);
+
+  for (let p of particles) {
+    p.draw(bgCanvas, totalTime);
+  }
+
+  // Render current scene
+  let sceneFn = [sceneLogo, sceneMolecules, sceneFactory, sceneProducts, sceneEnding][sceneIndex];
+  sceneFn(this, totalTime, progress);
+
+  // Scene indicator dots
+  drawSceneIndicator();
+}
+
+function drawSceneIndicator() {
+  noStroke();
+  let dotY = H - 25;
+  let startX = W/2 - (SCENES.length * 15) / 2;
+  for (let i = 0; i < SCENES.length; i++) {
+    let x = startX + i * 15;
+    let isActive = i === sceneIndex;
+    let isDone = i < sceneIndex;
+    let a = isActive ? 180 : isDone ? 80 : 40;
+    let s = isActive ? 7 : 5;
+    fill(isActive ? 0 : isDone ? 0 : 255,
+         isActive ? 212 : isDone ? 255 : 255,
+         isActive ? 255 : isDone ? 136 : 255, a);
+    circle(x, dotY, s);
+  }
+}
+
+// Key handlers
+function keyPressed() {
+  if (key === 's') {
+    saveCanvas('crvab-promo', 'png');
+  }
+  if (key === 'r') {
+    sceneIndex = 0; sceneTime = 0; totalTime = 0;
+  }
+  if (key === ' ' && sceneIndex < SCENES.length - 1) {
+    sceneIndex++; sceneTime = 0;
+  }
+  if (key === 'f') {
+    let fs = fullscreen();
+    fullscreen(!fs);
+  }
+}
+</script>
+<div id="info">科为博企业宣传片 · 按 [S] 截图 · [Space] 下一场景 · [R] 重播</div>
+</body>
+</html>

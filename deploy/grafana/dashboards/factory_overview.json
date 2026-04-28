@@ -1,0 +1,415 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "科为博工厂数字化监控面板",
+  "description": "内蒙古科为博生物科技 — 全厂数字化监控总览",
+  "version": 1,
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "timezone": "Asia/Shanghai",
+  "panels": [
+    {
+      "id": 1,
+      "title": "工厂运行状态",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 6 }
+            ]
+          },
+          "unit": "none",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "count(workshop_status == 1)",
+          "legendFormat": "运行中车间",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "当前生产批次",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 3 }
+            ]
+          },
+          "unit": "none",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "active_batches_total",
+          "legendFormat": "在产批次",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "MQTT 连接数",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 100 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "mqtt_connected_clients",
+          "legendFormat": "设备连接",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "异常告警总数",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(anomaly_detection_total[5m]))",
+          "legendFormat": "异常/秒",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "HTTP 请求速率",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 4 },
+      "options": {
+        "legend": { "calcs": ["mean", "max", "min"], "displayMode": "table", "placement": "right" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "unit": "req/s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(flask_http_request_total[1m]))",
+          "legendFormat": "总请求",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(flask_http_request_total{endpoint=~'/dingtalk/.*'}[1m]))",
+          "legendFormat": "钉钉请求",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(flask_http_request_total{endpoint='/health'}[1m]))",
+          "legendFormat": "健康检查",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "请求延迟 (P50/P95/P99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 4 },
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "right" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "传感器趋势 — 发酵温度",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "options": {
+        "legend": { "calcs": ["mean", "max", "min", "last"], "displayMode": "table", "placement": "right" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 15, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 35 },
+              { "color": "yellow", "value": 37 },
+              { "color": "red", "value": 39 }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "device_status{device_type='fermenter'}",
+          "legendFormat": "发酵罐 {{device_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "MQTT 消息速率",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+      "options": {
+        "legend": { "calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "right" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "opacity", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } },
+          "unit": "msg/s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(mqtt_messages_total[1m]))",
+          "legendFormat": "MQTT 消息",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "系统状态总览",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 20 },
+      "options": {
+        "sortBy": [],
+        "footer": { "enablePagination": true, "fields": "", "reducer": ["sum"], "show": false },
+        "frameIndex": 0,
+        "showTypeIcons": false
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "align": "auto",
+            "cellOptions": { "type": "auto" },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "状态" },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": { "type": "color-text", "mode": "basic" }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum by (service) (up)",
+          "legendFormat": "",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": { "regex": "service", "rename": "服务" }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "Value": true, "__name__": true, "instance": true, "job": true },
+            "indexByName": {},
+            "renameByName": { "Value": "状态", "service": "服务名称" }
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "异常检测分布",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 20 },
+      "options": {
+        "displayLabels": ["name", "percent"],
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": ["sum"],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "hideFrom": { "legend": false, "tooltip": false, "viz": false } },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (anomaly_type) (anomaly_detection_total)",
+          "legendFormat": "{{anomaly_type}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"],
+    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+  },
+  "tags": ["crvab", "factory", "monitoring", "production"],
+  "schemaVersion": 38,
+  "style": "dark"
+}

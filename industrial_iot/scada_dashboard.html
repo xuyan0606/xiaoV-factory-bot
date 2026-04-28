@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>科为博 SCADA 监控大屏</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#050510;color:#e0e8f0;font-family:'PingFang SC',sans-serif;padding:12px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.hdr{text-align:center;flex-shrink:0;padding:8px 0 12px}
+.hdr h1{font-size:20px;letter-spacing:6px;background:linear-gradient(90deg,#00d4ff,#00ff88);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hdr .sub{font-size:10px;color:rgba(255,255,255,0.2);margin-top:4px;letter-spacing:3px}
+.hdr .status-bar{display:flex;justify-content:center;gap:20px;font-size:10px;margin-top:6px;color:rgba(255,255,255,0.3)}
+.hdr .status-bar .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px}
+.dot.g{background:#00ff88}.dot.r{background:#ff4444}
+.grid{flex:1;display:grid;grid-template-columns:2fr 1fr;gap:8px;min-height:0}
+.left{display:flex;flex-direction:column;gap:8px;min-height:0}
+.fermenters{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;flex:1;min-height:0}
+.card{background:rgba(0,20,50,0.5);border:1px solid rgba(0,212,255,0.08);border-radius:6px;padding:10px;display:flex;flex-direction:column}
+.card .t{font-size:10px;color:rgba(0,212,255,0.5);margin-bottom:6px;letter-spacing:1px;flex-shrink:0}
+.card .v{display:flex;justify-content:space-around;flex-wrap:wrap;gap:4px;flex:1}
+.card .v .item{text-align:center;flex:1;min-width:60px}
+.card .v .item .num{font-size:18px;font-weight:700;font-family:'Orbitron',monospace}
+.card .v .item .num.cyan{color:#00d4ff}.card .v .item .num.green{color:#00ff88}.card .v .item .num.gold{color:#ffcc00}.card .v .item .num.red{color:#ff4444}
+.card .v .item .lbl{font-size:8px;color:rgba(255,255,255,0.3);margin-top:2px}
+.plc-status{display:flex;align-items:center;gap:6px;font-size:9px;color:rgba(255,255,255,0.4);flex-shrink:0;padding-top:4px;border-top:1px solid rgba(255,255,255,0.03)}
+.charts{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.chart-box{background:rgba(0,20,50,0.3);border:1px solid rgba(0,212,255,0.04);border-radius:4px;padding:4px;min-height:0}
+.chart-box .ct{font-size:8px;color:rgba(0,212,255,0.3);margin-bottom:2px}
+.ch{width:100%;height:calc(100% - 14px);min-height:0}
+.right{display:flex;flex-direction:column;gap:8px;min-height:0}
+.right .panel{background:rgba(0,20,50,0.5);border:1px solid rgba(0,212,255,0.08);border-radius:6px;padding:8px;display:flex;flex-direction:column;flex:1;min-height:0}
+.right .panel .pt{font-size:10px;color:rgba(0,212,255,0.5);margin-bottom:6px;letter-spacing:1px;flex-shrink:0}
+.alarm-list{flex:1;overflow-y:auto;font-size:10px;line-height:1.8;min-height:0}
+.alarm-list .a{display:flex;justify-content:space-between;padding:2px 4px;border-bottom:1px solid rgba(255,255,255,0.02)}
+.alarm-list .a.warn{color:#ffcc00}.alarm-list .a.crit{color:#ff4444}
+.alarm-list .a .msg{flex:1}.alarm-list .a .tm{color:rgba(255,255,255,0.2);font-size:8px;margin-left:8px}
+.conn-info{font-size:8px;color:rgba(255,255,255,0.15);text-align:center;padding:4px;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <h1>科为博 SCADA 监控系统</h1>
+  <div class="sub">CRVAB · INDUSTRIAL IOT · REAL-TIME MONITORING</div>
+  <div class="status-bar">
+    <span><span class="dot g"></span>MQTT 在线</span>
+    <span><span class="dot g"></span>Modbus PLC</span>
+    <span><span class="dot" id="wsDot"></span>WebSocket <span id="wsStatus">...</span></span>
+  </div>
+</div>
+<div class="grid">
+  <div class="left">
+    <div class="fermenters" id="fermenters"></div>
+    <div class="charts">
+      <div class="chart-box"><div class="ct">温度趋势 Temperature</div><div class="ch" id="ch1"></div></div>
+      <div class="chart-box"><div class="ct">pH 趋势</div><div class="ch" id="ch2"></div></div>
+      <div class="chart-box"><div class="ct">溶氧趋势 DO</div><div class="ch" id="ch3"></div></div>
+      <div class="chart-box"><div class="ct">罐压趋势 Pressure</div><div class="ch" id="ch4"></div></div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="panel">
+      <div class="pt">⚠️ 实时告警</div>
+      <div class="alarm-list" id="alarms"></div>
+      <div style="font-size:8px;color:rgba(255,255,255,0.15);text-align:right;margin-top:4px;flex-shrink:0">最多50条</div>
+    </div>
+    <div class="panel" style="flex:0.5">
+      <div class="pt">📊 系统信息</div>
+      <div style="font-size:9px;color:rgba(255,255,255,0.3);line-height:1.8">
+        <div>采集协议: MQTT + Modbus TCP</div>
+        <div>数据存储: SQLite</div>
+        <div id="sysInfo">连接中...</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="conn-info">ws://127.0.0.1:8765 · HTTP:8080</div>
+
+<script>
+// ==================== WebSocket ====================
+const wsDot=document.getElementById('wsDot'),wsSt=document.getElementById('wsStatus');
+let ws=null;
+function connectWS(){
+  ws=new WebSocket('ws://127.0.0.1:8765');
+  ws.onopen=()=>{wsDot.className='dot g';wsSt.textContent='已连接'};
+  ws.onclose=()=>{wsDot.className='dot r';wsSt.textContent='断开';setTimeout(connectWS,2000)};
+  ws.onmessage=(e)=>{
+    try{
+      const d=JSON.parse(e.data);
+      if(d.type==='mqtt')updateFermenter(d.device,d.data);
+      else if(d.type==='modbus')updatePLC(d.data);
+    }catch(ex){}
+  };
+}
+connectWS();
+
+// ==================== 发酵罐数据 ====================
+const MAX=30;
+const fermData={};
+for(let i=1;i<=3;i++)fermData['fermenter_'+i]={temp:[],ph:[],do:[],level:[],pressure:[]};
+
+function createFermenterCards(){
+  const container=document.getElementById('fermenters');
+  const names=['1号发酵罐','2号发酵罐','3号发酵罐'];
+  const colors=['#00d4ff','#00ff88','#ffcc00'];
+  for(let i=1;i<=3;i++){
+    const div=document.createElement('div');div.className='card';div.id='card_'+i;
+    div.innerHTML=`<div class="t" style="color:${colors[i-1]}">⚗️ ${names[i-1]}</div>
+      <div class="v">
+        <div class="item"><div class="num cyan" id="f${i}_t">--</div><div class="lbl">温度 °C</div></div>
+        <div class="item"><div class="num green" id="f${i}_p">--</div><div class="lbl">pH</div></div>
+        <div class="item"><div class="num gold" id="f${i}_d">--</div><div class="lbl">溶氧 %</div></div>
+        <div class="item"><div class="num" style="color:${colors[i-1]}" id="f${i}_l">--</div><div class="lbl">液位 %</div></div>
+      </div>
+      <div class="plc-status"><span class="dot g"></span>在线 | 压力: <span id="f${i}_pr">--</span> MPa</div>`;
+    container.appendChild(div);
+  }
+}
+createFermenterCards();
+
+function updateFermenter(device,data){
+  const idx=device.split('_')[1];
+  if(idx<1||idx>3)return;
+  const f=fermData[device];
+  document.getElementById(`f${idx}_t`).textContent=data.temperature||'--';
+  document.getElementById(`f${idx}_p`).textContent=data.ph||'--';
+  document.getElementById(`f${idx}_d`).textContent=data.do||'--';
+  document.getElementById(`f${idx}_l`).textContent=data.level||'--';
+  document.getElementById(`f${idx}_pr`).textContent=data.pressure||'--';
+  // 颜色变化：温度>38变红
+  const tEl=document.getElementById(`f${idx}_t`);
+  if(data.temperature>38)tEl.style.color='#ff4444';else tEl.style.color='#00d4ff';
+
+  // 更新趋势数据
+  const now=new Date().toLocaleTimeString();
+  if(f.temp.length>MAX){f.temp.shift();f.ph.shift();f.do.shift();f.pressure.shift()}
+  f.temp.push({time:now,val:data.temperature});
+  f.ph.push({time:now,val:data.ph});
+  f.do.push({time:now,val:data.do});
+  f.pressure.push({time:now,val:data.pressure});
+  updateCharts();
+}
+
+// ==================== PLC状态 ====================
+function updatePLC(data){
+  document.getElementById('sysInfo').innerHTML=
+    `PLC: ${data.status===1?'运行中':'停止'} | 温度: ${data.temperature}°C | pH: ${data.ph}`;
+}
+
+// ==================== 趋势图 ====================
+const keys=['ch1','ch2','ch3','ch4'];
+const names=['温度 °C','pH','溶氧 %','压力 MPa'];
+const colors=['#ff6b6b','#2ecc71','#3498db','#f39c12'];
+const fields=['temp','ph','do','pressure'];
+const charts={};
+
+keys.forEach((id,i)=>{
+  const c=echarts.init(document.getElementById(id));
+  c.setOption({
+    grid:{l:'3%',r:'3%',b:'6%',t:'3%'},tooltip:{trigger:'axis'},
+    xAxis:{type:'category',data:[],axisLabel:{color:'rgba(255,255,255,0.15)',fontSize:7}},
+    yAxis:{type:'value',name:names[i],nameTextStyle:{color:'rgba(255,255,255,0.15)',fontSize:7},
+           splitLine:{lineStyle:{color:'rgba(255,255,255,0.03)'}}},
+    series:[{type:'line',data:[],smooth:true,symbol:'none',
+             lineStyle:{color:colors[i],width:1},areaStyle:{color:colors[i],opacity:0.05}}]
+  });
+  charts[id]=c;
+});
+
+function updateCharts(){
+  // 使用1号罐的数据做趋势展示
+  const f=fermData['fermenter_1'];
+  if(!f||f.temp.length<2)return;
+  keys.forEach((id,i)=>{
+    const field=fields[i];
+    const data=f[field];
+    const times=data.map(d=>d.time);
+    const vals=data.map(d=>d.val);
+    const opt=charts[id].getOption();
+    opt.xAxis[0].data=times;
+    opt.series[0].data=vals;
+    charts[id].setOption(opt);
+  });
+}
+
+// ==================== 告警列表 ====================
+const alarmList=document.getElementById('alarms');
+function addAlarm(msg,level='WARN'){
+  const div=document.createElement('div');div.className='a '+(level==='CRITICAL'?'crit':'warn');
+  const now=new Date();const tm=now.toLocaleTimeString();
+  div.innerHTML=`<span class="msg">${level==='CRITICAL'?'🔴':'🟡'} ${msg}</span><span class="tm">${tm}</span>`;
+  alarmList.prepend(div);
+  if(alarmList.children.length>50)alarmList.removeChild(alarmList.lastChild);
+}
+
+// 模拟接收MQTT数据（作为后备）
+let mockCount=0;
+setInterval(()=>{
+  if(ws&&ws.readyState===1)return; // WebSocket优先
+  const data={
+    temperature:(36+Math.random()*3).toFixed(1),
+    ph:(6.5+Math.random()*0.5).toFixed(2),
+    do:(75+Math.random()*20).toFixed(1),
+    level:(60+Math.random()*10).toFixed(1),
+    pressure:(0.04+Math.random()*0.02).toFixed(3)
+  };
+  const device='fermenter_'+(mockCount%3+1);
+  mockCount++;
+  updateFermenter(device,data);
+},2000);
+
+// 定期检查异常
+setInterval(()=>{
+  for(let i=1;i<=3;i++){
+    const el=document.getElementById(`f${i}_t`);
+    if(el&&parseFloat(el.textContent)>38.5){
+      addAlarm(`罐${i} 温度异常: ${el.textContent}°C`,'CRITICAL');
+    }
+  }
+},5000);
+
+document.getElementById('sysInfo').textContent='等待数据...';
+</script>
+</body>
+</html>

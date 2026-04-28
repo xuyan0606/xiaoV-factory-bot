@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>内蒙古科为博生物科技 — 科技赋能生物智造</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body {
+    background: #050510;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh; overflow: hidden;
+  }
+  canvas { display: block; }
+  #info {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,0.2); font-family: 'Courier New', monospace; font-size: 11px;
+    text-align: center; pointer-events: none; z-index: 10;
+    letter-spacing: 2px;
+  }
+</style>
+<script>p5 = { disableFriendlyErrors: true };</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+</head>
+<body>
+<script>
+// ================================================================
+// 内蒙古科为博生物科技有限公司 — 企业宣传片 V2
+// INNER MONGOLIA CRVAB BIO-TECHNOLOGY CO., LTD
+// ================================================================
+
+// ---- 配色系统 ----
+const C = {
+  bg:        '#050510',
+  bg2:       '#080820',
+  cyan:      [0, 212, 255],
+  cyanDim:   [0, 180, 230],
+  green:     [0, 255, 136],
+  greenDim:  [0, 200, 100],
+  purple:    [124, 58, 237],
+  purpleDim: [100, 40, 200],
+  white:     [232, 240, 255],
+  gray:      [140, 150, 180],
+  gold:      [255, 200, 50],
+  red:       [255, 80, 80],
+};
+
+// ---- 场景定义 ----
+const SCENES = [
+  { name: 'logo',       dur: 8.5, label: '企业标识' },
+  { name: 'strength',   dur: 8,   label: '企业实力' },
+  { name: 'process',    dur: 14,  label: '生产工艺' },
+  { name: 'digital',    dur: 12,  label: '数字转型' },
+  { name: 'products',   dur: 8,   label: '产品矩阵' },
+  { name: 'ending',     dur: 7,   label: '展望未来' },
+];
+
+// ---- 全局状态 ----
+let W = 1920, H = 1080;
+let particles = [];        // 背景粒子
+let dataParticles = [];    // 数据流粒子
+let sceneIdx = 0, sceneTime = 0, totalTime = 0;
+let prevSceneIdx = -1;
+let zOff = 0;
+let bgLayer, fgLayer, glowLayer;
+
+// ---- 缓动函数 ----
+function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+function easeOut(t) { return 1 - (1-t)*(1-t); }
+function easeIn(t) { return t*t; }
+function lerp(a, b, t) { return a + (b-a)*t; }
+function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
+
+// ---- FBM Noise ----
+function fbm(px, py, oct=3) {
+  let v=0, a=1, f=1, s=0;
+  for(let i=0;i<oct;i++){v+=noise(px*f,py*f)*a;s+=a;a*=0.5;f*=2;}
+  return v/s;
+}
+
+// ---- 粒子类 ----
+class BgParticle {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = random(-W*0.1, W*1.1);
+    this.y = random(-H*0.1, H*1.1);
+    this.vx=0; this.vy=random(-0.12,-0.04);
+    this.sz = random(1,2.8);
+    this.alpha = random(30, 100);
+    this.phase = random(TWO_PI);
+    this.ns = random(0.002,0.006);
+    this.na = random(15,45);
+    this.spd = random(0.15,0.5);
+    this.type = random()>0.7 ? 'cyan' : random()>0.5 ? 'green' : 'purple';
+  }
+  update(t) {
+    let n = noise(this.x*this.ns, this.y*this.ns, zOff);
+    let ang = n * TWO_PI * 2;
+    this.vx += cos(ang) * 0.04;
+    this.vy += sin(ang) * 0.04 - 0.008;
+    this.vx *= 0.97; this.vy *= 0.97;
+    this.x += this.vx * this.spd;
+    this.y += this.vy * this.spd;
+    if(this.y < -30) { this.y = H+30; this.x = random(W); }
+    if(this.x < -30) this.x = W+30;
+    if(this.x > W+30) this.x = -30;
+  }
+  draw(buf, t, globalFade) {
+    let bright = 0.6 + 0.4 * sin(t*0.4 + this.phase);
+    let c = this.type === 'cyan' ? C.cyan :
+            this.type === 'green' ? C.green : C.purple;
+    let a = this.alpha * bright * 0.5 * globalFade;
+    buf.noStroke();
+    buf.fill(c[0], c[1], c[2], a);
+    buf.circle(this.x, this.y, this.sz);
+    buf.fill(c[0], c[1], c[2], a*0.2);
+    buf.circle(this.x, this.y, this.sz*4);
+  }
+}
+
+// ---- 工具: 发光文字 ----
+function glowText(buf, txt, x, y, sz, col, glowCol, glowSize, alpha) {
+  buf.textAlign(CENTER, CENTER);
+  buf.noStroke();
+  for(let i=glowSize; i>0; i-=2) {
+    let a = map(i, 0, glowSize, 0, 12) * (alpha/255);
+    buf.fill(glowCol[0], glowCol[1], glowCol[2], a);
+    buf.textSize(sz + i*1.5);
+    buf.text(txt, x, y);
+  }
+  buf.fill(col[0], col[1], col[2], alpha);
+  buf.textSize(sz);
+  buf.text(txt, x, y);
+}
+
+function drawGrid(buf, alpha) {
+  buf.push();
+  buf.noFill();
+  buf.stroke(255, 255, 255, 4 * alpha);
+  buf.strokeWeight(0.3);
+  for(let x=0; x<W; x+=80) buf.line(x,0,x,H);
+  for(let y=0; y<H; y+=80) buf.line(0,y,W,y);
+  buf.pop();
+}
+
+// ---- 场景1: Logo 开场 ----
+function sceneLogo(t, progress) {
+  let pf = clamp(progress * 2, 0, 1);           // 主内容淡入
+  let pf2 = clamp((progress-0.25)*3, 0, 1);     // 副标题
+  let pf3 = clamp((progress-0.5)*3, 0, 1);      // 标语
+  let lineF = clamp((progress-0.35)*4, 0, 1);   // 下划线
+
+  // 背景粒子
+  image(bgLayer, 0, 0);
+
+  // DNA 背景
+  push();
+  translate(W/2, H/2);
+  let dnaSeg = 50, dnaR = 200, dnaH = 350;
+  noFill();
+  for(let i=0; i<dnaSeg; i++) {
+    let f = i/dnaSeg;
+    let y = map(f, 0, 1, -dnaH/2, dnaH/2);
+    let ang = f * TWO_PI * 5 + t*0.3;
+    let x1 = cos(ang) * dnaR;
+    let x2 = cos(ang + PI) * dnaR;
+    let a = 50 * pf * (1 - Math.abs(f*2-1)*0.5);
+    stroke(C.cyan[0], C.cyan[1], C.cyan[2], a);
+    strokeWeight(0.8);
+    circle(x1, y, 3);
+    circle(x2, y, 3);
+    if(i%4===0) {
+      stroke(C.green[0], C.green[1], C.green[2], a*0.4);
+      strokeWeight(0.4);
+      line(x1, y, x2, y);
+    }
+  }
+  pop();
+
+  // CRVAB 标题
+  let logoY = H * 0.38;
+  let scalePulse = 1 + sin(t*0.6)*0.008;
+  textFont('Courier New', 90);
+  textStyle(BOLD);
+
+  // 发光
+  for(let i=6; i>0; i--) {
+    let ga = map(i,0,6,0,18*pf);
+    fill(C.cyan[0], C.cyan[1], C.cyan[2], ga);
+    textSize(90*scalePulse + i*4);
+    text('CRVAB', W/2, logoY);
+  }
+  fill(C.cyan[0], C.cyan[1], C.cyan[2], 255*pf);
+  textSize(90*scalePulse);
+  text('CRVAB', W/2, logoY);
+
+  // 英文全称
+  textStyle(NORMAL);
+  textFont('Courier New', 13);
+  fill(C.gray[0], C.gray[1], C.gray[2], 160*pf);
+  let enFull = 'INNER MONGOLIA CRVAB BIO-TECHNOLOGY CO., LTD';
+  text(enFull, W/2, logoY + 38);
+
+  // 中文全称
+  textStyle(BOLD);
+  textFont('PingFang SC, sans-serif', 22);
+  fill(C.white[0], C.white[1], C.white[2], 220*pf2);
+  let cnFull = '内蒙古科为博生物科技有限公司';
+  text(cnFull, W/2, logoY + 68);
+
+  // 下划线
+  if(lineF > 0) {
+    let lw = lerp(0, 160, lineF);
+    stroke(C.cyan[0], C.cyan[1], C.cyan[2], 120*pf2);
+    strokeWeight(1.5);
+    noFill();
+    line(W/2-lw/2, logoY+82, W/2+lw/2, logoY+82);
+  }
+
+  // 标语: 逐字出现
+  if(pf3 > 0) {
+    let tagline = '科技赋能生物智造';
+    let totalChars = tagline.length;
+    let charsToShow = floor(pf3 * totalChars);
+    let displayText = tagline.slice(0, charsToShow);
+    if(charsToShow > 0) {
+      textFont('PingFang SC, sans-serif', 17);
+      textStyle(NORMAL);
+      fill(C.green[0], C.green[1], C.green[2], 200*pf3);
+      text(displayText, W/2, logoY + 112);
+    }
+  }
+
+  // 底部粒子汇聚效果
+  noStroke();
+  for(let i=0; i<30; i++) {
+    let a = random(TWO_PI);
+    let r = random(80, 400) * (1 - pf*0.6);
+    if(r < 50) continue;
+    let px = W/2 + cos(a + t*0.05) * r;
+    let py = H*0.38 + sin(a*0.6 + t*0.04) * r*0.4;
+    fill(C.cyan[0], C.cyan[1], C.cyan[2], 20*pf * (1 - r/400));
+    circle(px, py, 1.5);
+  }
+}
+
+// ---- 场景2: 企业实力 ----
+function sceneStrength(t, progress) {
+  image(bgLayer, 0, 0);
+  let pf = clamp(progress*1.2,0,1);
+
+  // 数字矩阵背景
+  push();
+  for(let i=0; i<60; i++) {
+    let x = random(W), y = random(H);
+    let digit = floor(random(10));
+    let a = 6 * pf;
+    fill(C.cyan[0], C.cyan[1], C.cyan[2], a);
+    textFont('Courier New', 8);
+    text(digit, x, y);
+  }
+  pop();
+
+  // 标题
+  textFont('PingFang SC, sans-serif', 26);
+  textStyle(BOLD);
+  textAlign(CENTER, TOP);
+  fill(C.white[0], C.white[1], C.white[2], 200*pf);
+  text('生物技术研究院 · 研发体系', W/2, 40);
+  stroke(C.cyan[0], C.cyan[1], C.cyan[2], 40*pf);
+  strokeWeight(1);
+  noFill();
+  line(W/2-120, 70, W/2+120, 70);
+
+  // 研究中心 - 环形布局
+  let centers = [
+    { name: '酶制剂应用研究中心',   ang: -PI*0.8, color: C.cyan },
+    { name: '发酵工艺研究中心',     ang: -PI*0.4, color: C.green },
+    { name: '检测评估中心',         ang: 0,       color: C.gold },
+    { name: '益生菌应用研究中心',   ang: PI*0.4,  color: C.cyan },
+    { name: '菌种管理保藏中心',     ang: PI*0.8,  color: C.purple },
+    { name: '合成生物学创新中心',   ang: PI*1.2,  color: C.green },
+  ];
+
+  let ringCx = W/2, ringCy = H*0.45, ringR = 150;
+
+  // 连接线
+  noFill();
+  stroke(C.cyan[0], C.cyan[1], C.cyan[2], 20*pf);
+  strokeWeight(0.5);
+  for(let i=0; i<centers.length; i++) {
+    let a = centers[i].ang;
+    let px = ringCx + cos(a)*ringR;
+    let py = ringCy + sin(a)*ringR;
+    line(ringCx, ringCy, px, py);
+  }
+
+  // 中心圆
+  noStroke();
+  fill(C.cyan[0], C.cyan[1], C.cyan[2], 30*pf);
+  circle(ringCx, ringCy, 50);
+  fill(C.cyan[0], C.cyan[1], C.cyan[2], 60*pf);
+  circle(ringCx, ringCy, 25);
+  fill(C.white[0], C.white[1], C.white[2], 180*pf);
+  textFont('Courier New', 9);
+  textStyle(NORMAL);
+  textAlign(CENTER, CENTER);
+  text('技术\n总监', ringCx, ringCy);
+
+  // 各中心节点
+  textFont('PingFang SC, sans-serif', 12);
+  textStyle(NORMAL);
+  for(let i=0; i<centers.length; i++) {
+    let c = centers[i];
+    let cf = clamp((pf - 0.1 - i*0.04)*5, 0, 1);
+    if(cf <= 0) continue;
+    let cx = ringCx + cos(c.ang)*ringR;
+    let cy = ringCy + sin(c.ang)*ringR;
+    let pulse = 0.7 + 0.3*sin(t*1.5 + i*1.2);
+
+    // 节点光晕
+    noStroke();
+    fill(c.color[0], c.color[1], c.color[2], 25*cf*pulse);
+    circle(cx, cy, 40);
+    fill(c.color[0], c.color[1], c.color[2], 60*cf*pulse);
+    circle(cx, cy, 16);
+    fill(c.color[0], c.color[1], c.color[2], 180*cf);
+    circle(cx, cy, 6);
+
+    // 标签
+    fill(C.white[0], C.white[1], C.white[2], 200*cf);
+    textAlign(CENTER, CENTER);
+    let lx = cx;
+    let ly = cy + (cos(c.ang) > 0 ? -34 : 34);
+    text(c.name, lx, ly);
+  }
+
+  // 底部实力标签
+  let tags = ['研发团队', '核心菌种', '专利技术', '行业标准'];
+  textAlign(CENTER, CENTER);
+  textFont('PingFang SC, sans-serif', 13);
+  textStyle(BOLD);
+  let tagStartY = H*0.82;
+  for(let i=0; i<tags.length; i++) {
+    let tf = clamp((pf - 0.3 - i*0.05)*4, 0, 1);
+    if(tf > 0) {
+      let tx = W/2 + (i-1.5)*200;
+      fill(C.cyan[0], C.cyan[1], C.cyan[2], 60*tf);
+      noStroke();
+      rect(tx-40, tagStartY-12, 80, 24, 4);
+      stroke(C.cyan[0], C.cyan[1], C.cyan[2], 100*tf);
+      strokeWeight(0.5);
+      noFill();
+      rect(tx-40, tagStartY-12, 80, 24, 4);
+      fill(C.white[0], C.white[1], C.white[2], 200*tf);
+      noStroke();
+      text(tags[i], tx, tagStartY+1);
+    }
+  }
+}
+
+// ---- 场景3: 生产工艺全流程 ----
+function sceneProcess(t, progress) {
+  image(bgLayer, 0, 0);
+  let pf = clamp(progress*0.8, 0, 1);
+
+  // 顶部标题
+  textFont('PingFang SC, sans-serif', 24);
+  textStyle(BOLD);
+  textAlign(CENTER, TOP);
+  fill(C.white[0], C.white[1], C.white[2], 200*pf);
+  text('15B液体酶生产工艺全流程', W/2, 25);
+  stroke(C.cyan[0], C.cyan[1], C.cyan[2], 40*pf);
+  strokeWeight(1);
+  noFill();
+  line(W/2-100, 55, W/2+100, 55);
+
+  // 工艺流程 - 从左到右
+  let stages = [
+    { label: '菌种', icon: '●',
+      detail: '甘油管→划线\n37℃ 15-17h',
+      params: '培养基: 蛋白胨1%, 葡萄糖5%'},
+    { label: '摇瓶', icon: '●',
+      detail: '220rpm 37℃\nOD4.5 pH6.0-6.7',
+      params: '单克隆→摇瓶\n150/500mL×2'},
+    { label: '种子罐', icon: '●',
+      detail: '6-7h转罐\npH回升标准',
+      params: '15B配方\n葡萄糖0.04%'},
+    { label: '发酵', icon: '●',
+      detail: '最终发酵\n酶活不再增长',
+      params: '葡萄糖30%\n玉米浆1.75%'},
+    { label: '絮凝', icon: '●',
+      detail: '石灰水pH8.5\n静置60min',
+      params: '硅藻土+PMA\n多步流加'},
+    { label: '粗滤', icon: '●',
+      detail: '浊度<5EBC\n0.2-0.4MPa',
+      params: '板框压滤\n50℃以上'},
+    { label: '精滤', icon: '●',
+      detail: '浊度<1EBC\n60-65℃',
+      params: '硅藻土预涂\n400#+10#'},
+    { label: '超滤', icon: '●',
+      detail: '0.4-0.8MPa\n50-55℃',
+      params: '膜浓缩\n通量监测'},
+    { label: '灌装', icon: '●',
+      detail: '除菌→罐装\n检测入库',
+      params: '防腐剂配方\n比重1.1-1.2'},
+  ];
+
+  let totalW = stages.length * 120;
+  let startX = (W - totalW) / 2 + 60;
+  let flowY = H * 0.5;
+
+  // 连接管线（从左到右动态绘制）
+  noFill();
+  for(let i=0; i<stages.length-1; i++) {
+    let x1 = startX + i*120;
+    let x2 = startX + (i+1)*120;
+    let stagePf = clamp((pf - i*0.06)*3, 0, 1);
+    if(stagePf <= 0) continue;
+
+    let lineEnd = lerp(x1, x2, stagePf);
+    stroke(C.cyan[0], C.cyan[1], C.cyan[2], 40*pf);
+    strokeWeight(1.5);
+    line(x1, flowY, lineEnd, flowY);
+
+    // 数据包
+    if(stagePf > 0.3) {
+      let packetPos = ((t*80) % (x2-x1));
+      let px = x1 + packetPos;
+      if(px <= x2) {
+        noStroke();
+        fill(C.green[0], C.green[1], C.green[2], 150*pf);
+        circle(px, flowY, 5);
+        fill(C.green[0], C.green[1], C.green[2], 30*pf);
+        circle(px, flowY, 12);
+      }
+    }
+  }
+
+  // 各阶段节点
+  textAlign(CENTER, CENTER);
+  for(let i=0; i<stages.length; i++) {
+    let s = stages[i];
+    let stagePf = clamp((pf - i*0.06)*3, 0, 1);
+    if(stagePf <= 0) continue;
+
+    let sx = startX + i*120;
+    // 节点
+    let pulse = 0.7 + 0.3*sin(t*1.2 + i*0.8);
+    noStroke();
+    fill(C.cyan[0], C.cyan[1], C.cyan[2], 30*stagePf*pulse);
+    circle(sx, flowY, 36);
+    fill(C.cyan[0], C.cyan[1], C.cyan[2], 80*stagePf*pulse);
+    circle(sx, flowY, 18);
+    fill(C.cyan[0], C.cyan[1], C.cyan[2], 200*stagePf);
+    circle(sx, flowY, 8);
+
+    // 标签（上方）
+    textFont('PingFang SC, sans-serif', 13);
+    textStyle(BOLD);
+    fill(C.white[0], C.white[1], C.white[2], 220*stagePf);
+    text(s.label, sx, flowY - 48);
+
+    // 详情（下方）
+    textFont('PingFang SC, sans-serif', 9);
+    textStyle(NORMAL);
+    fill(C.gray[0], C.gray[1], C.gray[2], 150*stagePf);
+    text(s.detail, sx, flowY + 35);
+
+    // 参数（更下方）
+    if(stagePf > 0.7) {
+      fill(C.green[0], C.green[1], C.green[2], 120*stagePf);
+      text(s.params, sx, flowY + 60);
+    }
+  }
+
+  // 底部展示配方参数（滚动）
+  let formulaFade = clamp((pf - 0.5)*3, 0, 1);
+  if(formulaFade > 0) {
+    let formulaY = H*0.87;
+    // 半透明背景
+    noStroke();
+    fill(0, 10, 30, 150*formulaFade);
+    rect(W*0.08, formulaY-15, W*0.84, 90, 6);
+
+    textFont('Courier New', 10);
+    textStyle(NORMAL);
+    textAlign(LEFT, CENTER);
+
+    let formulas = [
+      '15B发酵配方 | 葡萄糖3000kg(30%) | 玉米浆干粉175kg(1.75%) | 大豆蛋白制品180kg(1.8%)',
+      '硫酸铵33kg(0.33%) | 磷酸氢二钠180kg(1.8%) | 硫酸镁7.6kg(0.08%) | 氯化钙33kg(0.33%)',
+      '工艺参数 | 温度37°C | 罐压0.05MPa | pH6.0-6.7 | 搅拌220rpm | 溶氧自动调控',
+    ];
+    for(let fi=0; fi<formulas.length; fi++) {
+      fill(C.white[0], C.white[1], C.white[2], 150*formulaFade - fi*20);
+      text(formulas[fi], W*0.1, formulaY + fi*24);
+    }
+  }
+}
+
+// ---- 场景4: 数字化转型 ----
+function sceneDigital(t, progress) {
+  image(bgLayer, 0, 0);
+  let pf = clamp(progress*1.2, 0, 1);
+
+  // 顶部标题
+  textFont('PingFang SC, sans-serif', 24);
+  textStyle(BOLD);
+  textAlign(CENTER, TOP);
+  fill(C.white[0], C.white[1], C.white[2], 200*pf);
+  text('数字化智能制造升级', W/2, 25);
+  stroke(C.cyan[0], C.cyan[1], C.cyan[2], 40*pf);
+  strokeWeight(1);
+  noFill();
+  line(W/2-100, 55, W/2+100, 55);
+
+  // 工厂节点网络
+  let nodes = [
+    { x:0.12, y:0.30, label:'发酵车间\n一期/二期',    color:C.cyan,    group:'prod' },
+    { x:0.28, y:0.55, label:'提取车间',              color:C.green,   group:'prod' },
+    { x:0.44, y:0.30, label:'干燥塔\n1/2/3号',       color:C.cyan,    group:'prod' },
+    { x:0.58, y:0.55, label:'混合车间',              color:C.green,   group:'prod' },
+    { x:0.72, y:0.30, label:'仓储物流',              color:C.purple,  group:'log' },
+    { x:0.88, y:0.55, label:'质量\n检测中心',         color:C.gold,    group:'qa' },
+    { x:0.50, y:0.80, label:'数据\n中控中心',         color:C.purple,  group:'ctrl' },
+    { x:0.20, y:0.80, label:'空压间',                color:C.gray,    group:'util' },
+    { x:0.35, y:0.78, label:'污水\n处理',             color:C.gray,    group:'util' },
+    { x:0.65, y:0.78, label:'变电室',                color:C.gray,    group:'util' },
+  ];
+
+  // 数据流连接 (中控中心连接所有)
+  let ctrlNode = nodes.find(n => n.group === 'ctrl');
+  let prodNodes = nodes.filter(n => n.group === 'prod');
+
+  // 先画连接线
+  noFill();
+  for(let n of prodNodes) {
+    stroke(C.cyan[0], C.cyan[1], C.cyan[2], 20*pf);
+    strokeWeight(0.8);
+    line(ctrlNode.x*W, ctrlNode.y*H, n.x*W, n.y*H);
+
+    // 数据包
+    let packetPos = (t*50) % dist(ctrlNode.x*W, ctrlNode.y*H, n.x*W, n.y*H);
+    let frac = packetPos / (dist(ctrlNode.x*W, ctrlNode.y*H, n.x*W, n.y*H) || 1);
+    let ppx = lerp(ctrlNode.x*W, n.x*W, frac);
+    let ppy = lerp(ctrlNode.y*H, n.y*H, frac);
+    noStroke();
+    fill(C.green[0], C.green[1], C.green[2], 150*pf);
+    circle(ppx, ppy, 4);
+    fill(C.green[0], C.green[1], C.green[2], 25*pf);
+    circle(ppx, ppy, 10);
+  }
+
+  // 节点
+  textAlign(CENTER, CENTER);
+  let order = [...nodes];
+  for(let i=0; i<order.length; i++) {
+    let n = order[i];
+    let nf = clamp((pf - 0.02 - i*0.02)*4, 0, 1);
+    if(nf <= 0) continue;
+    let nx = n.x*W, ny = n.y*H;
+    let pulse = 0.6 + 0.4*sin(t*1.5 + i*0.7);
+
+    // 光晕
+    noStroke();
+    fill(n.color[0], n.color[1], n.color[2], 20*nf*pulse);
+    circle(nx, ny, 50);
+    fill(n.color[0], n.color[1], n.color[2], 50*nf);
+    circle(nx, ny, 22);
+    fill(n.color[0], n.color[1], n.color[2], 150*nf);
+    circle(nx, ny, 7);
+
+    // 标签
+    textFont('PingFang SC, sans-serif', 11);
+    textStyle(BOLD);
+    fill(C.white[0], C.white[1], C.white[2], 200*nf);
+    text(n.label, nx, ny + 35);
+  }
+
+  // 左侧 - 现状升级面板
+  let panelFade = clamp((pf-0.3)*3, 0, 1);
+  if(panelFade > 0) {
+    let px = 30, py = H*0.15;
+    noStroke();
+    fill(0, 10, 30, 150*panelFade);
+    rect(px, py, 195, 130, 6);
+    stroke(C.cyan[0], C.cyan[1], C.cyan[2], 30*panelFade);
+    strokeWeight(0.5);
+    noFill();
+    rect(px, py, 195, 130, 6);
+
+    let items = [
+      { label: 'DCS 已部署', status: '✓ 在线', color: C.green },
+      { label: '历史数据存储', status: '升级中', color: C.gold },
+      { label: '中控远程调控', status: '规划中', color: C.cyan },
+      { label: 'MES 质量追溯', status: '建设中', color: C.cyan },
+    ];
+    textFont('PingFang SC, sans-serif', 12);
+    textStyle(NORMAL);
+    textAlign(LEFT, CENTER);
+    for(let i=0; i<items.length; i++) {
+      let it = items[i];
+      let iy = py + 22 + i*28;
+      fill(C.white[0], C.white[1], C.white[2], 200*panelFade);
+      text(it.label, px+12, iy);
+      textAlign(RIGHT, CENTER);
+      fill(it.color[0], it.color[1], it.color[2], 180*panelFade);
+      text(it.status, px+180, iy);
+      textAlign(LEFT, CENTER);
+    }
+  }
+
+  // 右侧 - 实时数据面板
+  let sensorFade = clamp((pf-0.4)*3, 0, 1);
+  if(sensorFade > 0) {
+    let sensors = [
+      { label: '发酵温度', val: () => (36.2 + sin(t*0.3)*0.5).toFixed(1)+'°C', color: C.cyan },
+      { label: 'pH 值',   val: () => (6.7 + sin(t*0.2+1)*0.15).toFixed(1),     color: C.green },
+      { label: '溶氧 DO', val: () => Math.round(82 + sin(t*0.25)*5)+'%',       color: C.cyan },
+      { label: '罐压',    val: () => '0.05MPa',                                  color: C.gold },
+      { label: '搅拌转速', val: () => Math.round(220 + sin(t*0.4)*3)+'rpm',     color: C.purple },
+    ];
+    let sx = W - 220, sy = H*0.15;
+
+    noStroke();
+    fill(0, 10, 30, 150*sensorFade);
+    rect(sx, sy, 190, sensors.length*30+20, 6);
+    stroke(C.cyan[0], C.cyan[1], C.cyan[2], 30*sensorFade);
+    strokeWeight(0.5);
+    noFill();
+    rect(sx, sy, 190, sensors.length*30+20, 6);
+
+    textFont('Courier New', 11);
+    textStyle(NORMAL);
+    textAlign(LEFT, CENTER);
+    // 标题
+    fill(C.cyan[0], C.cyan[1], C.cyan[2], 150*sensorFade);
+    text('实时工艺参数', sx+12, sy+14);
+    noStroke();
+    for(let i=0; i<sensors.length; i++) {
+      let s = sensors[i];
+      let sy2 = sy + 36 + i*24;
+      fill(C.white[0], C.white[1], C.white[2], 150*sensorFade);
+      text(s.label, sx+12, sy2);
+      textAlign(RIGHT, CENTER);
+      fill(s.color[0], s.color[1], s.color[2], 200*sensorFade);
+      text(s.val(), sx+178, sy2);
+      textAlign(LEFT, CENTER);
+    }
+  }
+
+  // 底部诊断
+  let diagFade = clamp((pf-0.6)*3, 0, 1);
+  if(diagFade > 0) {
+    let dy = H*0.94;
+    textFont('PingFang SC, sans-serif', 12);
+    textAlign(CENTER, CENTER);
+    textStyle(NORMAL);
+    fill(C.green[0], C.green[1], C.green[2], 150*diagFade);
+    text('从传统发酵到智能制造 — 科为博全面数字化升级进行中', W/2, dy);
+  }
+}
+
+// ---- 场景5: 产品矩阵 ----
+function sceneProducts(t, progress) {
+  image(bgLayer, 0, 0);
+  let pf = clamp(progress*1.3, 0, 1);
+
+  // 标题
+  textFont('PingFang SC, sans-serif', 24);
+  textStyle(BOLD);
+  textAlign(CENTER, TOP);
+  fill(C.white[0], C.white[1], C.white[2], 200*pf);
+  text('产品矩阵 · 应用领域', W/2, 25);
+  stroke(C.cyan[0], C.cyan[1], C.cyan[2], 40*pf);
+  strokeWeight(1);
+  noFill();
+  line(W/2-100, 55, W/2+100, 55);
+
+  // 三大产品
+  let products = [
+    {
+      emoji: '●',
+      title: '酶制剂系列',
+      items: ['液体酶制剂', '酶粉/颗粒'],
+      apps: ['饲料·食品·纺织'],
+      color: C.green,
+      cx: W*0.25,
+    },
+    {
+      emoji: '●',
+      title: '益生菌系列',
+      items: ['乳酸菌菌粉', '微生态制剂'],
+      apps: ['医药·保健·畜牧'],
+      color: C.cyan,
+      cx: W*0.50,
+    },
+    {
+      emoji: '●',
+      title: '生物发酵',
+      items: ['工业酶制剂', '功能性添加剂'],
+      apps: ['环保·化工·医药'],
+      color: C.purple,
+      cx: W*0.75,
+    },
+  ];
+
+  textAlign(CENTER, CENTER);
+  for(let i=0; i<products.length; i++) {
+    let p = products[i];
+    let pFade = clamp((pf - 0.1 - i*0.08)*3, 0, 1);
+    if(pFade <= 0) continue;
+
+    let cx = p.cx, cy = H*0.48;
+    let pulse = 0.6 + 0.4*sin(t*0.8 + i*2.1);
+
+    // 发光环
+    noStroke();
+    fill(p.color[0], p.color[1], p.color[2], 15*pFade*pulse);
+    circle(cx, cy, 120);
+    fill(p.color[0], p.color[1], p.color[2], 30*pFade*pulse);
+    circle(cx, cy, 70);
+    fill(p.color[0], p.color[1], p.color[2], 60*pFade);
+    circle(cx, cy, 35);
+    fill(C.bg[0]||5, C.bg[1]||5, C.bg[2]||16, 180*pFade);
+    circle(cx, cy, 22);
+    fill(p.color[0], p.color[1], p.color[2], 200*pFade);
+    circle(cx, cy, 12);
+
+    // 环绕粒子
+    for(let j=0; j<16; j++) {
+      let a = j/16 * TWO_PI + t*(0.5+i*0.2);
+      let r = 45 + sin(t*1.2+j)*10;
+      let rx = cx + cos(a)*r;
+      let ry = cy + sin(a)*r;
+      fill(p.color[0], p.color[1], p.color[2], 80*pFade);
+      circle(rx, ry, 3);
+    }
+
+    // 标题
+    textFont('PingFang SC, sans-serif', 18);
+    textStyle(BOLD);
+    fill(C.white[0], C.white[1], C.white[2], 220*pFade);
+    text(p.title, cx, cy - 85);
+
+    // 产品项
+    textFont('PingFang SC, sans-serif', 12);
+    textStyle(NORMAL);
+    for(let j=0; j<p.items.length; j++) {
+      fill(C.white[0], C.white[1], C.white[2], 160*pFade);
+      text(p.items[j], cx, cy + 38 + j*22);
+    }
+
+    // 应用
+    let appFade = clamp((pFade - 0.3)*3, 0, 1);
+    if(appFade > 0) {
+      fill(p.color[0], p.color[1], p.color[2], 150*appFade);
+      text(p.apps[0], cx, cy + 90);
+    }
+  }
+}
+
+// ---- 场景6: 结尾 ----
+function sceneEnding(t, progress) {
+  image(bgLayer, 0, 0);
+  let pf = clamp(progress*1.5, 0, 1);
+  let pf2 = clamp((progress-0.2)*2.5, 0, 1);
+  let pf3 = clamp((progress-0.5)*3, 0, 1);
+
+  // Logo 再次浮现
+  let logoY = H*0.38;
+  let s = 100 + sin(t*0.4)*1.5;
+  textFont('Courier New', s);
+  textStyle(BOLD);
+
+  for(let i=6; i>0; i--) {
+    let ga = map(i,0,6,0,15*pf);
+    fill(C.cyan[0], C.cyan[1], C.cyan[2], ga);
+    textSize(s + i*5);
+    text('CRVAB', W/2, logoY);
+  }
+  fill(C.cyan[0], C.cyan[1], C.cyan[2], 255*pf);
+  textSize(s);
+  text('CRVAB', W/2, logoY);
+
+  // 公司名
+  textFont('PingFang SC, sans-serif', 18);
+  textStyle(BOLD);
+  fill(C.white[0], C.white[1], C.white[2], 200*pf);
+  text('内蒙古科为博生物科技有限公司', W/2, logoY + 40);
+
+  // 英语名
+  textFont('Courier New', 11);
+  textStyle(NORMAL);
+  fill(C.gray[0], C.gray[1], C.gray[2], 120*pf);
+  text('INNER MONGOLIA CRVAB BIO-TECHNOLOGY CO., LTD', W/2, logoY + 58);
+
+  // 标语
+  if(pf2 > 0) {
+    textFont('PingFang SC, sans-serif', 30);
+    textStyle(BOLD);
+    fill(C.green[0], C.green[1], C.green[2], 220*pf2);
+    text('以科技驱动绿色未来', W/2, H*0.62);
+  }
+
+  // 底部 - 循环播放文字
+  if(pf3 > 0) {
+    textFont('Courier New', 10);
+    textStyle(NORMAL);
+    fill(C.gray[0], C.gray[1], C.gray[2], 80*pf3);
+    text('科技赋能生物智造 · 数字化转型进行时', W/2, H*0.82);
+  }
+
+  // 粒子逐渐散开
+  noStroke();
+  for(let i=0; i<35; i++) {
+    let a = random(TWO_PI) + t*0.02;
+    let r = random(60, 350) * (0.5 + pf*0.5);
+    let px = W/2 + cos(a)*r;
+    let py = logoY + sin(a*0.5)*r*0.4;
+    fill(C.cyan[0], C.cyan[1], C.cyan[2], 25*pf * (1 - r/350));
+    circle(px, py, 1.8);
+  }
+}
+
+// ================================================================
+// MAIN SETUP
+// ================================================================
+function setup() {
+  createCanvas(W, H);
+  pixelDensity(1);
+  colorMode(RGB, 255);
+  frameRate(30);
+  textFont('PingFang SC, sans-serif');
+
+  // 创建图层
+  bgLayer = createGraphics(W, H);
+
+  // 初始化粒子
+  for(let i=0; i<100; i++) particles.push(new BgParticle());
+
+  // 预绘背景网格
+  bgLayer.noFill();
+  bgLayer.stroke(255, 255, 255, 4);
+  bgLayer.strokeWeight(0.3);
+  for(let x=0; x<W; x+=80) bgLayer.line(x,0,x,H);
+  for(let y=0; y<H; y+=80) bgLayer.line(0,y,W,y);
+}
+
+function draw() {
+  let dt = 1/30;
+  totalTime += dt;
+  sceneTime += dt;
+  zOff += 0.002;
+
+  let cur = SCENES[sceneIdx];
+  let progress = sceneTime / cur.dur;
+
+  // 场景切换
+  if(progress >= 1) {
+    sceneIdx = (sceneIdx + 1) % SCENES.length;
+    sceneTime = 0;
+    progress = 0;
+  }
+
+  // 更新背景粒子
+  for(let p of particles) p.update(totalTime);
+
+  // 绘制背景层
+  bgLayer.noStroke();
+  bgLayer.fill(5, 5, 16, 3);
+  bgLayer.rect(0, 0, W, H);
+  for(let p of particles) p.draw(bgLayer, totalTime, 1);
+
+  // 渲染当前场景
+  background(C.bg[0], C.bg[1], C.bg[2]);
+
+  let sceneFns = [sceneLogo, sceneStrength, sceneProcess, sceneDigital, sceneProducts, sceneEnding];
+  sceneFns[sceneIdx](totalTime, progress);
+
+  // 场景指示器
+  drawIndicator();
+
+  // 场景名标签
+  noStroke();
+  fill(C.gray[0], C.gray[1], C.gray[2], 30);
+  textFont('Courier New', 9);
+  textAlign(LEFT, TOP);
+  text(cur.label + (sceneIdx+1)+'/'+SCENES.length, 15, 15);
+}
+
+function drawIndicator() {
+  noStroke();
+  let dotY = H - 22, dotR = 4, gap = 20;
+  let startX = W/2 - (SCENES.length * gap) / 2;
+  for(let i=0; i<SCENES.length; i++) {
+    let x = startX + i*gap;
+    let act = i === sceneIdx;
+    let done = i < sceneIdx;
+    let a = act ? 200 : done ? 100 : 40;
+    let s = act ? 7 : 5;
+    fill(act ? C.cyan[0] : done ? C.green[0] : C.gray[0],
+         act ? C.cyan[1] : done ? C.green[1] : C.gray[1],
+         act ? C.cyan[2] : done ? C.green[2] : C.gray[2], a);
+    circle(x, dotY, s);
+  }
+}
+
+function keyPressed() {
+  if(key === 's') saveCanvas('crvab_promo_v2', 'png');
+  if(key === ' ') { sceneIdx = min(sceneIdx+1, SCENES.length-1); sceneTime = 0; }
+  if(key === 'r') { sceneIdx=0; sceneTime=0; totalTime=0; }
+  if(key === 'f') fullscreen(!fullscreen());
+}
+</script>
+<div id="info">科为博企业宣传片 · [S]截图 [Space]下一场景 [R]重播 [F]全屏</div>
+</body>
+</html>

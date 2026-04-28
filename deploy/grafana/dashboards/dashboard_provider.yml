@@ -1,0 +1,17 @@
+# =============================================================================
+# 科为博工厂数字化项目 — Grafana Dashboard 自动加载配置
+# 将 dashboard JSON 自动注册到 Grafana
+# =============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: '科为博工厂监控面板'
+    orgId: 1
+    folder: '科为博工厂'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
