@@ -878,3 +878,702 @@ End Function
 
 剩下的 Java、VB 可以在需要时再针对性学习。如果将来你们的 MES 系统选型选了 Java 技术栈，那时候再系统性学 Spring Boot。
 
+---
+
+# RealWorld 实战对比：Flask vs Django
+
+基于两个 RealWorld 实现：
+- Flask: gothinkster/flask-realworld-example-app
+- Django: c4ffein/realworld-django-ninja（81k⭐）
+
+## 项目结构对比
+
+### Flask 版
+```
+conduit/                      ← 手工组织
+├── __init__.py
+├── app.py                    ← 工厂函数 create_app()
+├── settings.py               ← 配置类
+├── extensions.py             ← 扩展注册
+├── database.py               ← 数据库
+├── exceptions.py             ← 异常
+├── commands.py               ← CLI
+├── utils.py
+├── user/                     ← 用户模块（蓝图）
+│   ├── models.py
+│   ├── views.py
+│   └── serializers.py
+├── profile/                  ← 个人资料模块
+├── articles/                 ← 文章模块
+└── tests/                    ← 测试
+    ├── conftest.py
+    ├── factories.py
+    └── test_*.py
+autoapp.py                    ← 入口
+```
+
+### Django 版
+```
+config/                       ← Django 项目配置（自动生成）
+├── settings.py               ← 全局配置
+├── urls.py                   ← 路由注册
+├── asgi.py / wsgi.py         ← 部署入口
+
+apps/                         ← 应用模块（manage.py startapp）
+├── accounts/                 ← 用户模块
+│   ├── models.py             ← 数据模型
+│   ├── api.py                ← API 路由
+│   ├── schemas.py            ← 序列化
+│   ├── admin.py              ← 后台管理
+│   └── tests.py              ← 测试
+├── articles/                 ← 文章模块
+├── comments/                 ← 评论模块
+
+helpers/                      ← 工具函数
+manage.py                     ← Django CLI 入口
+pyproject.toml                ← 依赖管理
+```
+
+## 核心差异
+
+| 维度 | Flask 设计哲学 | Django 设计哲学 |
+|------|--------------|---------------|
+| **指导思想** | 微框架，只提供最基础的功能 | 全栈框架，"电池全带" |
+| **应用结构** | 你决定怎么组织 | 框架规定了结构（apps/） |
+| **ORM** | 可选（SQLAlchemy） | 内置（Django ORM） |
+| **序列化** | 可选（marshmallow） | 内置（Django Ninja 用 Pydantic） |
+| **管理后台** | 无 | 内置（django.contrib.admin） |
+| **迁移** | 可选（Alembic/Flask-Migrate） | 内置（manage.py migrate） |
+| **中间件** | 手工写 before_request | 内置中间件系统 |
+| **认证** | 自己集成 | 内置 auth + 第三方 jwt_ninja |
+| **测试客户端** | WeTest（第三方） | 内置（django.test.Client） |
+| **CLI** | 自己写 Click 命令 | 内置（manage.py） |
+| **项目规模** | 适合中小型（<5万行） | 适合中大型（>5万行） |
+| **学习曲线** | 平，但需要自己选组件 | 陡，但学完就全了 |
+| **灵活性** | 高，你可以自由选择 | 低，按框架的规矩来 |
+
+## 同样功能，代码风格对比
+
+### 创建文章 API
+
+**Flask（conduit/articles/views.py）：**
+```python
+@blueprint.route('/api/articles', methods=('POST',))
+@jwt_required
+@use_kwargs(article_schema)
+@marshal_with(article_schema)
+def make_article(body, title, description, tagList=None):
+    article = Article(title=title, description=description, body=body,
+                      author=current_user.profile)
+    if tagList is not None:
+        for tag in tagList:
+            mtag = Tags.query.filter_by(tagname=tag).first()
+            if not mtag:
+                mtag = Tags(tag)
+                mtag.save()
+            article.add_tag(mtag)
+    article.save()
+    return article
+```
+
+**Django（apps/articles/api.py）：**
+```python
+@router.post("/articles", auth=TokenAuth(), response={201: Any, ...})
+def create_article(request: AuthedRequest, payload: ArticleCreateSchema):
+    tags = []
+    if payload.tagList:
+        for tag_name in payload.tagList:
+            tag, _ = Tag.objects.get_or_create(tagname=tag_name)
+            tags.append(tag)
+    article = Article.objects.create(
+        author=request.user.profile,
+        title=payload.title,
+        description=payload.description,
+        body=payload.body,
+    )
+    article.tags.set(tags)
+    return 201, {"article": ArticleOutSchema.from_orm(article)}
+```
+
+**区别：**
+- Flask 用装饰器组合（`@jwt_required` + `@use_kwargs` + `@marshal_with`）
+- Django Ninja 用 `Router` 对象 + `auth` 参数 + `response` 类型声明
+- Flask 的序列化在装饰器中隐式完成
+- Django Ninja 的序列化在函数签名中显式声明（`payload: ArticleCreateSchema`）
+
+## 从 Django 版学到的模式
+
+### 1. Django 的 App 架构（对你有启发）
+
+Django 强制每个功能模块独立为一个 app：
+```
+apps/accounts/     ← 用户系统，自己有自己的 models/api/tests
+apps/articles/     ← 文章系统，完全不依赖 accounts 的实现细节
+apps/comments/     ← 评论系统，只通过 API 调用 articles
+```
+
+**对你项目的启发：**
+你的 factory_bot_server.py 可以拆成这样：
+```
+xiaov/
+├── webhook/       ← 钉钉消息处理（类似 accounts）
+├── query/         ← 查询逻辑（类似 articles）
+├── push/          ← 推送服务（类似 comments）
+└── managers/      ← 车间主任角色（类似 profile）
+```
+
+### 2. Django Ninja 的路由自动注册
+
+```python
+# urls.py
+api.add_router(f"/{api_prefix}", "accounts.api.router")
+api.add_router(f"/{api_prefix}", "articles.api.router")
+api.add_router(f"/{api_prefix}", "comments.api.router")
+```
+比 Flask 蓝图更简洁——不需要 import 具体对象，只需要传路径字符串。
+
+### 3. 统一的异常处理
+
+Django Ninja 有 `@api.exception_handler` 装饰器：
+```python
+@api.exception_handler(ValidationError)
+def handle_validation_error(...):
+    # 把 Pydantic 验证错误转成统一格式
+    return api.create_response(request, {"errors": errors}, status=422)
+
+@api.exception_handler(Http404)
+def handle_not_found(...): ...
+```
+
+Flask 版也有类似的模式，但需要手工写 `errorhandler` 注册。
+
+### 4. 测试方式对比
+
+**Flask（pytest + webtest）：**
+```python
+def test_create_article(testapp, auth_headers):
+    resp = testapp.post('/api/articles',
+        json={"article": {"title": "Test", ...}},
+        headers=auth_headers)
+    assert resp.status_code == 201
+```
+
+**Django（内置 client）：**
+```python
+from django.test import TestCase
+
+class TestArticleAPI(TestCase):
+    def test_create_article(self):
+        resp = self.client.post('/api/articles',
+            {"article": {"title": "Test", ...}},
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Token {token}')
+        assert resp.status_code == 201
+```
+
+Django 测试不需要安装 pytest-webtest，内置客户端就够用。但 pytest 的 fixture 模式更灵活。
+
+### 5. Django 的 GitHub CI 更丰富
+
+从 `.github/workflows/` 可以看出，Django 版有 5 个 CI 流程：
+```
+lint.yml                  ← 代码风格检查
+test-django-sqlite.yml    ← SQLite 测试
+test-django-postgresql.yml ← PostgreSQL 测试
+test-hurl-sqlite.yml      ← HTTP API 集成测试（Hurl）
+test-hurl-postgresql.yml  ← 生产环境 API 测试
+typing.yml                ← 类型检查
+```
+
+你的项目目前只有一个简单的 CI，可以借鉴这种矩阵测试。
+
+## 什么时候选 Flask vs Django？
+
+| 场景 | 推荐 |
+|------|------|
+| 小型 API 服务，1-2 人维护 | **Flask** — 快速、灵活 |
+| 需要管理后台 | **Django** — admin 开箱即用 |
+| 项目持续增长到 10 万行+ | **Django** — 架构规范 |
+| 团队人员流动大 | **Django** — 约定大于配置，新人容易上手 |
+| 需要高自由度定制 | **Flask** — 不受框架限制 |
+| 已经有 Flask 项目 | 继续用 Flask，不需要硬转 Django |
+
+## 对你 xiaoV 项目的建议
+
+你的项目目前用 Flask，**不需要转 Django**。但可以从 Django 的 app 架构中学到模块化思想：
+
+```
+不一定要改成 Django，但可以借鉴它的 app 隔离模式：
+
+你的结构：                    Django 给你的启发：
+factory_bot_server.py  →    每个功能做独立模块
+factory_managers.py    →    模块间通过 API 通信，不直接 import
+```
+
+下一节会讲如何用 Flask 蓝图实现类似的模块化（参见 flask-refactoring skill）。
+
+---
+
+# LlamaIndex（38k⭐）— RAG 标准实现分析
+
+## 项目定位
+
+LlamaIndex 是目前最完整的 RAG（检索增强生成）框架，由 Jerry Liu 创建。
+核心目标：**让 LLM 能够读取、理解、查询你的私有数据**。
+
+它不是一个"库"，而是一个 RAG 设计模式合集。相比 LangChain，LlamaIndex 更专注于 RAG 场景。
+
+## 核心架构
+
+```
+用户问题
+    ↓
+┌─────────────────────────────────────┐
+│           查询引擎 (Query Engine)      │
+│  ┌──────────┐    ┌──────────┐       │
+│  │  检索器   │ →  │  后处理器  │       │
+│  │ Retriever│    │ Postprocessor│     │
+│  └──────────┘    └──────────┘       │
+│       ↓                ↓           │
+│  ┌──────────┐    ┌──────────┐       │
+│  │  索引     │    │ 响应合成器 │       │
+│  │  Index    │    │ Synthesizer│     │
+│  └──────────┘    └──────────┘       │
+└─────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────┐
+│           响应合成器                   │
+│  Prompt = 问题 + 检索到的片段          │
+│  → LLM 生成回答                       │
+└─────────────────────────────────────┘
+```
+
+## 五个核心概念
+
+### 1. Document（文档）
+```python
+# 原始数据入口
+from llama_index.core import Document
+
+doc = Document(
+    text="发酵罐3号温度传感器在2026-04-27出现偏差...",
+    metadata={
+        "设备": "温度传感器",
+        "位置": "发酵罐3号",
+        "日期": "2026-04-27"
+    }
+)
+```
+
+### 2. Node（节点）
+Document 被切分成更小的节点。这是 RAG 的"原子单位"。
+
+```python
+# 切分策略（Chunking）
+from llama_index.core.node_parser import SentenceSplitter
+
+parser = SentenceSplitter(
+    chunk_size=1024,      # 每块约 1024 tokens
+    chunk_overlap=200     # 块之间重叠 200 tokens（保持上下文连贯）
+)
+nodes = parser.get_nodes_from_documents([doc])
+```
+
+**为什么要有 Node？** 一个文档可能太长，直接检索整个文档不精确。切成小块后，检索更精准。
+
+### 3. Embedding（嵌入向量）
+这是 LlamaIndex 和你的手写 RAG 最大的区别。
+
+| 维度 | 你的手写 TF-IDF | LlamaIndex 的 Embedding |
+|------|----------------|------------------------|
+| 向量化方式 | 词频统计 | 神经网络模型 |
+| 语义理解 | 不能（只匹配相同词） | 能（"温度偏高"≈"温度异常"） |
+| 跨语言 | 不能 | 能（中文词匹配英文知识） |
+| 模型大小 | 无（代码里写死） | 几百 MB（需下载模型） |
+| 精度 | 低 | 高 |
+
+```python
+# LlamaIndex 的 Embedding 使用
+from llama_index.embeddings.openai import OpenAIEmbedding
+
+embed_model = OpenAIEmbedding(model="text-embedding-3-small")
+# "温度传感器故障" → [0.12, -0.54, 0.87, ...] (1536维向量)
+# "temperature sensor malfunction" → [0.11, -0.52, 0.89, ...] (相近！)
+```
+
+### 4. Index（索引）
+Index 是 LlamaIndex 的核心数据结构，组织 Node 和 Embedding 的关系。
+
+```python
+from llama_index.core import VectorStoreIndex
+from llama_index.vector_stores.chroma import ChromaVectorStore
+
+# 内存索引（适合小数据集）
+index = VectorStoreIndex.from_documents([doc])
+
+# 持久化索引（适合大数据集 - 使用向量数据库）
+index = VectorStoreIndex.from_documents(
+    documents,
+    vector_store=ChromaVectorStore(
+        chroma_collection=collection
+    )
+)
+```
+
+常见索引类型：
+
+| 索引类型 | 检索方式 | 适用场景 |
+|---------|---------|---------|
+| VectorStoreIndex | 语义相似度搜索 | 通用 RAG，最常用 |
+| SummaryIndex | 按顺序读取所有节点 | 需要全文理解的场景 |
+| TreeIndex | 树状结构推理 | 需要多步推理 |
+| KeywordTableIndex | 关键词匹配 | 精确查找 |
+| PropertyGraphIndex | 知识图谱 | 实体关系查询 |
+
+### 5. Retriever（检索器）
+```python
+# 基础检索：语义相似度 Top-K
+retriever = index.as_retriever(similarity_top_k=3)
+nodes = retriever.retrieve("3号发酵罐温度正常吗？")
+# → 返回最相关的 3 个节点
+
+# 高级检索：混合检索（语义+关键词）
+from llama_index.core.retrievers import (
+    VectorIndexRetriever,
+    KeywordIndexRetriever,
+)
+
+# 混合检索器
+retriever = RouterRetriever.from_defaults(
+    [vector_retriever, keyword_retriever]
+)
+```
+
+## 你的 TF-IDF RAG vs LlamaIndex
+
+### 你的代码（rag_knowledge_base.py）
+
+```python
+# ✅ 优点
+#   1. 零外部依赖，纯 Python 实现
+#   2. 代码量小（346行），可以理解每一行
+#   3. 针对工厂设备维保场景做了词典优化
+#   4. 有自己的中文分词器
+
+# ❌ 缺点
+#   1. TF-IDF 是词袋模型，丢失了词序信息
+#     "A比B大" vs "B比A大" → 向量一样！
+#   2. 不能理解语义相近但词不同的查询
+#     "设备过热" vs "温度异常升高" → 匹配不到
+#   3. 中文分词器太简陋（词典匹配+单字组合）
+#     "发酵罐温度" → ["发", "酵", "罐", "温", "度"]
+#     "发酵罐"是词典词，但"温度"被拆开了
+#   4. 没有增量更新机制，每次都要重新训练
+#   5. 不支持大规模文档集（文档多了向量变稀疏）
+```
+
+### LlamaIndex 的做法
+
+```python
+# ✅ 优点
+#   1. 语义理解：理解"过热"和"温度偏高"是同一件事
+#   2. 支持增量更新：随时加文档，不需要重新训练
+#   3. 多种检索策略：语义搜索+关键词搜索+混合搜索
+#   4. 支持多种向量数据库：Chroma、Pinecone、Weaviate、PGVector
+#   5. 支持多种 LLM 后端：OpenAI、Claude、本地模型
+#   6. 有完整的缓存、日志、监控
+
+# ❌ 缺点
+#   1. 依赖外部 Embedding 模型（需要网络或本地部署）
+#   2. 包体积大（llama-index 全家桶 100MB+）
+#   3. 学习曲线陡，概念多
+#   4. 对于小项目（几个文档）来说太重了
+#   5. 抽象层次高，出了问题难 debug
+```
+
+## 你应该用哪个？
+
+```
+你的场景判断标准：
+
+我的文档量：_____ 条（<100 条 → TF-IDF 够用）
+我的查询类型：_____（关键词查询 → TF-IDF 够用；语义查询 → Embedding）
+我的部署限制：_____（不可联网 → TF-IDF；可联网 → Embedding）
+
+建议：
+  < 100 条文档 + 关键词查询 → 继续用你的 TF-IDF
+  > 100 条文档 + 语义查询 → 升级到 Embedding
+  可联网 + 预算充足 → 用 LlamaIndex 或直接调 Embedding API
+```
+
+## 最小升级路径：从 TF-IDF 到 Embedding
+
+如果不引入 LlamaIndex 全家桶，只升级你的 Embedding 部分：
+
+```python
+# 方案：只用 Embedding API，保持你的代码结构
+import openai  # 或者用 deepseek 的 embedding API
+
+def embed_text(text):
+    """用 API 替代你的 TF-IDF"""
+    resp = openai.Embedding.create(
+        model="text-embedding-3-small",
+        input=text
+    )
+    return resp['data'][0]['embedding']  # 1536维向量
+
+def cosine_similarity(a, b):
+    """和你的代码一样，但向量质量高很多"""
+    import numpy as np
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+# 就这么简单！Embedding API + 余弦相似度 = 语义搜索
+# 不需要安装 LlamaIndex
+```
+
+## LlamaIndex 的启发总结
+
+```
+1. RAG 的核心不是 LLM，是检索（Retrieval）
+   检索质量决定回答质量
+
+2. 切分策略（Chunking）比模型选择更重要
+   块太大 → 噪声多；块太小 → 上下文不足
+   重叠（overlap）保证边界信息不丢失
+
+3. 元数据（metadata）过滤可以大幅提升精度
+   先按"设备=发酵罐"过滤，再语义搜索
+   比直接全网搜索精度高很多
+
+4. 混合检索（语义+关键词）优于纯语义检索
+   企业场景中，精确匹配（设备编号、批号）经常比语义搜索更重要
+```
+
+---
+
+# System Design Primer（290k⭐）— 架构思维
+
+## 项目定位
+
+这是 GitHub 上最火的系统设计学习资源，由 Donne Martin 创建。
+核心目标：**教你怎么设计大型分布式系统**。
+
+这不是一个"代码项目"，而是一个知识库。但它教你的是每个开发者都需要具备的**架构思维**。
+
+## 核心内容
+
+```
+系统设计基础
+├── 性能指标（Latency / Throughput / Availability）
+├── 垂直扩展 vs 水平扩展
+├── CAP 定理
+├── 一致性模型
+│   ├── 强一致性
+│   ├── 最终一致性
+│   └── 因果一致性
+├── 负载均衡
+├── 缓存策略
+├── 数据库设计
+│   ├── SQL vs NoSQL
+│   ├── 索引原理
+│   ├── 读写分离
+│   └── 分库分表（Sharding）
+└── 分布式系统
+    ├── 消息队列
+    ├── 分布式锁
+    ├── 分布式 ID
+    └── 共识算法（Raft/Paxos）
+```
+
+## 对你最有价值的 5 个概念
+
+### 1. 水平扩展 vs 垂直扩展（Scaling）
+
+```
+┌─────────────────────────────────────────────┐
+│ 垂直扩展（Scale Up）：换更大的机器           │
+│ 单机 4核 8GB → 单机 16核 64GB               │
+│ 优点：不改变代码                             │
+│ 缺点：有上限，越贵性价比越低                  │
+│ 适合：你的 Flask 服务（初期）                │
+│                                             │
+│ 水平扩展（Scale Out）：加更多的机器           │
+│ 1台服务器 → 3台服务器 → 10台服务器            │
+│ 优点：几乎无限扩展                           │
+│ 缺点：需要改造架构（加负载均衡、共享存储）        │
+│ 适合：大型 MES 系统（ThingsBoard 那样）        │
+└─────────────────────────────────────────────┘
+
+对你项目的意义：
+  xiaoV 工厂机器人现在是小项目，垂直扩展就够了
+  如果未来要做全厂 MES（500+用户并发），需要考虑水平扩展
+```
+
+### 2. CAP 定理（分布式系统的"不可能三角"）
+
+```
+一个分布式系统不能同时满足以下三个特性：
+
+    Consistency（一致性）
+        所有节点看到的数据一样
+        例子：银行转账，你的账户扣了钱，对方必须看到增加
+        /
+       /
+C ─── P ─── A
+  \        /
+   \      /
+    Availability（可用性）
+        每次请求都能得到响应（不保证数据最新）
+        例子：电商商品库存，看到还剩1件，但可能已经被别人买了
+
+    Partition Tolerance（分区容错性）
+        即使网络断开，系统还能工作
+        分布式系统必须选这个（网络一定会断）
+
+实际选择：
+  CP 系统（放弃可用性）：银行系统、ZooKeeper
+  AP 系统（放弃一致性）：DNS、CDN、电商商品浏览
+  CA 系统（放弃分区容错）：单机数据库（不需要分布式）
+
+对你项目的意义：
+  xiaoV 工厂机器人现在是单机系统，不需要考虑 CAP
+  如果做分布式传感器采集，需要考虑 AP（宁可数据不准，不能停）
+  如果做质量追溯系统，需要考虑 CP（宁可暂停，不能丢失数据）
+```
+
+### 3. 缓存策略（Caching）
+
+```
+用户请求
+   ↓
+┌──────────┐
+│  缓存     │ ← 先查缓存
+│  Redis    │
+└────┬─────┘
+     │ 缓存未命中
+     ↓
+┌──────────┐
+│  数据库   │ ← 再查数据库
+│  SQLite  │
+└──────────┘
+
+常见策略：
+  缓存穿透：查的数据不存在，每次都穿透到数据库
+    → 解决方案：缓存空值（Null Object Pattern）
+
+  缓存雪崩：大量缓存同时过期，请求全部打到数据库
+    → 解决方案：过期时间加随机偏移
+
+  缓存击穿：热点 key 过期，大量并发请求同时打到数据库
+    → 解决方案：互斥锁（只让一个请求去查数据库）
+
+对你项目的意义：
+  你的 FACTORY_DATA 字典就是"内存缓存"
+  如果改从真实数据库读数据，需要引入 Redis 缓存
+  查询车间状态（不常变）→ 缓存 5 分钟
+  查询当前批次（经常变）→ 缓存 30 秒
+```
+
+### 4. 异步处理：消息队列
+
+```
+同步模式（你现在的方式）：
+  用户请求 → 查数据库 → 返回结果
+  （整个过程用户必须等着）
+
+异步模式（消息队列）：
+  用户请求 → 写入队列 → 立即返回"处理中"
+  后台工作进程 → 从队列读取 → 处理 → 通知用户
+
+你项目中的潜在场景：
+  钉钉推送 → 如果直接 POST 到钉钉 API
+             网络慢时，用户请求需要等好几秒
+             改为：写入队列 → 立即返回
+                  后台慢慢推送到钉钉
+```
+
+### 5. 数据库设计：读写分离 + 分片
+
+```
+当前你的项目：
+  FACTORY_DATA = {字典}  ← 启动时加载到内存
+  每次查询都查字典        ← 适合小项目
+
+未来方案（如果数据量大了）：
+  
+  读写分离：
+    主库（写）：接收批次录入、设备状态更新
+    从库（读）：处理查询请求
+    数据从主库同步到从库
+
+  分片（Sharding）：
+    按"车间"分片：发酵车间的数据放在 DB1
+                   提取车间的数据放在 DB2
+    查询时先确定车间，再去对应的数据库
+
+  对你项目的意义：
+    FACTORY_DATA 字典已经有"分片"的思想了
+    自然就是按"车间"、"产品"、"设备"分组织的
+    迁移到真实数据库后，保持这个组织方式就行
+```
+
+## 系统设计面试问题（用于练习）
+
+这些问题可以用来检验你的架构思维：
+
+```
+1. 设计一个实时发酵监控系统
+   → 传感器数据采集 → 实时展示 → 异常告警 → 数据存储
+
+2. 设计一个设备维保管理系统
+   → 设备注册 → 保养计划 → 工单流转 → 零件库存
+
+3. 设计一个质检追溯系统
+   → 批次录入 → 检测数据 → 追溯链 → 报表生成
+
+4. 设计一个工厂数字孪生系统
+   → 3D 模型 → 实时数据映射 → 历史回放 → AI 预测
+```
+
+## System Design Primer 的启发
+
+```
+1. 先想清楚"多少个用户在用"，再决定架构
+   单用户系统用单机
+   100 用户加缓存
+   1000 用户加负载均衡
+   10000 用户考虑分片
+   100000 用户请招架构师
+
+2. 不成熟的优化是万恶之源
+   先让系统跑起来，再考虑扩展
+   大多数系统永远达不到需要分片的规模
+
+3. 缓存解决 80% 的性能问题
+   大部分查询是读，读的数据大部分是不常变的
+   缓存是性价比最高的优化手段
+
+4. 你的项目（xiaoV 工厂机器人）不需要分布式
+   单机 + 缓存就够了
+   未来扩展方向：从 SQLite 换 PostgreSQL
+   Redis 缓存可加可不加
+   消息队列等真正有性能瓶颈再说
+```
+
+## 三个项目的学习总结
+
+```
+　　　 RealWorld（81k⭐）               LlamaIndex（38k⭐）           System Design Primer（290k⭐）
+　　　 ─────────────                   ──────────────                ───────────────────────
+　　学什么   代码架构、Flask模式            RAG 系统设计                   分布式架构思维
+　　　 │                                    │                              │
+　　　 │                                    │                              │
+　　　 ↓                                    ↓                              ↓
+　　对你   factory_bot_server.py       rag_knowledge_base.py          MES/工厂系统架构设计
+　　的价值  按工厂+蓝图+配置类重构       升级到 Embedding 检索           理解什么时候需要什么架构
+```
+
+这个笔记可以随时翻，每个部分都对应你项目里的实际代码。
+
+
+
