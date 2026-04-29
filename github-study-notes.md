@@ -2727,6 +2727,145 @@ class DingTalkClient:
 - 统一错误码和状态码
 - 分页规范：page + per_page + total
 
+---
+
+# Python 异步编程 — asyncio 深入
+
+## 为什么需要异步？
+
+```
+同步（你现在的方式）：
+  用户A请求 → 查数据库(100ms) → 返回(10ms) → 总共110ms
+  用户B请求 → 等A完 → 查数据库(100ms) → 返回(10ms) → 总共110ms
+  如果A的查询慢（比如网络请求5秒），B只能等
+
+异步：
+  用户A请求 → 发起数据库查询 → 挂起 → 处理B的请求 → 数据库返回 → 继续A
+  A等待时不阻塞，B可以插队
+  总吞吐量大幅提升
+```
+
+## 核心概念
+
+### await + async def
+```python
+import asyncio
+
+async def fetch_sensor_data():
+    """异步函数：调用时不会阻塞"""
+    await asyncio.sleep(1)  # 模拟网络请求
+    return {"temperature": 36.5}
+
+async def main():
+    # 并发执行多个异步任务
+    task1 = asyncio.create_task(fetch_sensor_data())
+    task2 = asyncio.create_task(fetch_sensor_data())
+
+    # 等待所有任务完成
+    results = await asyncio.gather(task1, task2)
+    print(results)
+
+# 运行
+asyncio.run(main())
+```
+
+### 事件循环（Event Loop）
+```python
+# asyncio.run(main()) 内部做的事：
+loop = asyncio.new_event_loop()
+try:
+    loop.run_until_complete(main())  # 事件循环开始
+finally:
+    loop.close()
+
+# 事件循环的工作原理：
+# while True:
+#     for task in ready_tasks:
+#         task.run_one_step()  ← 每次只跑一步
+#         if task.is_done():
+#             task.set_result()
+#     for io_event in io_events:
+#         wake_up_waiting_task(io_event)
+```
+
+## 在 Flask 中使用异步
+
+```python
+from flask import Flask, jsonify
+import asyncio
+import aiohttp
+
+app = Flask(__name__)
+
+# Flask 2.0+ 支持异步路由
+@app.route('/api/sensors')
+async def get_sensors():
+    """并发获取多个传感器数据"""
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            fetch_one_sensor(session, "温度"),
+            fetch_one_sensor(session, "pH"),
+            fetch_one_sensor(session, "压力"),
+        ]
+        results = await asyncio.gather(*tasks)
+    return jsonify(results)
+
+async def fetch_one_sensor(session, name):
+    """单个传感器API调用"""
+    async with session.get(f"http://sensor-api/{name}") as resp:
+        return await resp.json()
+```
+
+## 异步 vs 多线程
+
+```
+  异步（asyncio）             多线程（threading）
+  ─────────────              ────────────────
+  单线程，协作式调度          多线程，抢占式调度
+  适合 I/O 密集型            适合 CPU 密集型 + I/O
+  没有锁的烦恼              需要加锁防数据竞争
+  不能做 CPU 重操作         能做 CPU 重操作
+  Python 原生支持           受 GIL 限制
+
+你的场景该用哪个？
+  网络请求（钉钉推送） → 异步  ✅
+  数据库查询         → 异步  ✅
+  传感器数据采集     → 异步  ✅
+  大量计算（比如模型推理）→ 多线程  ✅
+```
+
+## 对 xiaoV 项目的应用
+
+```python
+# 你的钉钉推送可以改成异步，并发推送提高效率
+
+import asyncio
+import aiohttp
+
+class AsyncDingTalk:
+    def __init__(self, webhook_url):
+        self.webhook_url = webhook_url
+
+    async def push(self, title, content):
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                self.webhook_url,
+                json={"msgtype": "text", "text": {"content": f"{title}\\n{content}"}}
+            ) as resp:
+                return await resp.json()
+
+    async def push_multiple(self, messages: list):
+        """并发推送多条消息"""
+        tasks = [self.push(m["title"], m["content"]) for m in messages]
+        return await asyncio.gather(*tasks)
+
+# 使用
+async def main():
+    bot = AsyncDingTalk(WEBHOOK_URL)
+    results = await bot.push_multiple([
+        {"title": "生产日报", "content": "..."},
+        {"title": "设备告警", "content": "..."},
+    ])
 ```
 
 
