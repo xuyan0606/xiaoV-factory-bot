@@ -2659,6 +2659,74 @@ def downgrade():
 
 这个笔记会跟随你的学习持续增长。
 每次学新东西，往这里加一章。
+
+---
+
+# A. 高星项目源码分析
+
+## Click（16k⭐）— 装饰器模式典范
+
+核心架构：`装饰器 → 核心对象 → 执行` 三层分离。
+
+```python
+# 用户写的（装饰器层）
+@click.command()
+@click.option('--name')
+def hello(name): ...
+
+# 实际变成（对象层）
+command = Command(callback=hello, params=[Option('--name')])
+
+# 执行（执行层）
+command.main(args=['--name', 'xiaoV'])
+```
+
+学到的模式：**注册式架构** — 用装饰器把函数注册到处理器字典，代替 if-elif 链。
+
+## Requests（52k⭐）— API 设计标杆
+
+核心原则：**80% 的用例一行代码搞定**。
+
+```python
+# 你的项目直接用这个模式优化钉钉推送
+class DingTalkClient:
+    def __init__(self, webhook_url):
+        self.session = requests.Session()
+        # 自动重试
+        retries = Retry(total=3, backoff_factor=1)
+        self.session.mount('https://', HTTPAdapter(max_retries=retries))
+
+    def push(self, title, content):
+        return self.session.post(self.webhook_url, json={...})
+```
+
+## Pydantic（22k⭐）— 数据校验
+
+校验逻辑写在模型类里，不在业务逻辑里。FastAPI 的基石。
+
+---
+
+# B. 软件设计深化
+
+## SOLID 原则（你的项目中的应用）
+
+1. **单一职责** — `handle_query()` 拆成多个小函数
+2. **开闭原则** — 用注册式架构代替 if-elif 链
+3. **依赖反转** — `BatchService(db: Database)` 不依赖具体数据库
+
+## 设计模式
+
+1. **工厂模式** — 根据输入类型创建不同的处理器
+2. **策略模式** — 运行时切换不同的推送方式（钉钉/WebSocket/日志）
+3. **观察者模式** — 批次状态变化时自动通知多个子系统
+
+## API 设计规范
+
+- 统一响应格式：`{success, data, error, timestamp}`
+- HTTP 动词对应 CRUD：GET/POST/PUT/DELETE
+- 统一错误码和状态码
+- 分页规范：page + per_page + total
+
 ```
 
 
