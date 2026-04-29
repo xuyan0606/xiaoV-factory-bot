@@ -1575,5 +1575,1096 @@ C ─── P ─── A
 
 这个笔记可以随时翻，每个部分都对应你项目里的实际代码。
 
+---
+
+# FastAPI — Python 新一代 Web 框架
+
+## FastAPI 是什么？
+
+FastAPI 是 2018 年由 Sebastián Ramírez 创建的 Python Web 框架。
+核心特点：**快（性能）+ 自动文档 + 类型安全**。
+
+它的"快"有两层意思：
+1. **运行快**：性能接近 Node.js 和 Go（基于 Starlette + Pydantic）
+2. **开发快**：自动生成 API 文档、参数校验、类型提示
+
+## FastAPI vs Flask vs Django
+
+| 维度 | Flask | Django | FastAPI |
+|------|-------|--------|---------|
+| **出生年份** | 2010 | 2005 | 2018 |
+| **性能** | 慢 | 中 | 快（异步原生） |
+| **异步支持** | 勉强（Flask 2.0+） | 部分 | 原生异步 |
+| **类型校验** | 无 | 无 | 强制（Pydantic） |
+| **自动文档** | 无 | 无 | 自带（Swagger + Redoc） |
+| **ORM** | 选配 | 内置 | 选配 |
+| **依赖注入** | 无 | 无 | 内置 |
+| **Star数** | 68k | 82k | 80k |
+| **学习曲线** | 低 | 中 | 中低 |
+| **适合项目** | 小型API | 大型全栈 | 中大型API |
+
+## 和 Flask 的代码对比
+
+### Flask 写法（你的当前风格）
+```python
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.route('/api/batches', methods=['GET'])
+def list_batches():
+    product = request.args.get('product', '')
+    limit = request.args.get('limit', 20, type=int)
+    # 参数校验靠自己写
+    if limit > 100:
+        return jsonify({"error": "limit 不能超过100"}), 422
+    # 查询逻辑
+    batches = get_batches(product, limit)
+    return jsonify(batches)
+```
+
+### FastAPI 写法
+```python
+from fastapi import FastAPI, Query, HTTPException
+from pydantic import BaseModel
+
+app = FastAPI()
+
+# 自动：参数类型校验 + API 文档 + 422 错误响应
+@app.get("/api/batches")
+def list_batches(
+    product: str = Query("", max_length=50),
+    limit: int = Query(20, ge=1, le=100)  # 自动校验 1≤limit≤100
+):
+    batches = get_batches(product, limit)
+    return batches
+```
+
+**区别：**
+- Flask：参数校验自己写 if 语句
+- FastAPI：类型注解 + Query 约束，自动校验
+- Flask：没有自动文档
+- FastAPI：访问 `/docs` 就出 Swagger UI
+
+## Pydantic 模型（核心武器）
+
+```python
+from pydantic import BaseModel, Field
+from datetime import datetime
+
+class BatchCreate(BaseModel):
+    """创建批次请求体"""
+    product_name: str = Field(..., min_length=2, max_length=100)
+    quantity: float = Field(..., gt=0, description="产量(kg)")
+    workshop: str = Field(default="发酵车间")
+
+class BatchResponse(BaseModel):
+    """批次响应体"""
+    id: int
+    batch_no: str
+    product_name: str
+    created_at: datetime
+    status: str
+
+    class Config:
+        from_attributes = True  # 支持从 ORM 模型转换
+
+
+@app.post("/api/batches", response_model=BatchResponse)
+def create_batch(data: BatchCreate):
+    """创建新批次（自动生成 API 文档）"""
+    batch = create_batch_in_db(data)
+    return batch
+# 效果：
+# - 请求体自动校验（product_name 必须有，≥2字符）
+# - 响应体自动序列化（datetime 转 ISO 格式）
+# - /docs 自动生成接口文档
+# - 客户端可以看到完整的请求/响应结构
+```
+
+## 依赖注入（FastAPI 的 DI 系统）
+
+```python
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+security = HTTPBearer()
+
+# 依赖：获取当前用户
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
+    user = verify_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="无效 token")
+    return user
+
+# 依赖：获取数据库会话
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# 使用：自动注入用户和数据库
+@app.get("/api/batches/{batch_id}")
+def get_batch(
+    batch_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    batch = db.query(Batch).filter(Batch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404)
+    return batch
+```
+
+## 异步支持
+
+```python
+import asyncio
+
+@app.get("/api/slow-query")
+async def slow_query():
+    """
+    异步路由：不会阻塞其他请求
+    适用于：网络请求、数据库查询、文件读写
+    """
+    await asyncio.sleep(1)  # 模拟慢操作
+    return {"result": "done"}
+
+# 对比 Flask：
+# Flask 同步路由会阻塞工作线程
+# 如果同时 10 个人请求慢接口，后面的人都得等
+```
+
+## 你什么时候该用 FastAPI？
+
+```
+你的 Flask 项目继续用 Flask     → 不需要迁移，没出问题就别动
+         ↓
+如果以后写新项目                  → 用 FastAPI
+比如：实时数据采集 API、数字孪生服务
+         ↓
+如果写 AI/RAG API               → 强烈推荐 FastAPI
+因为：异步 + Pydantic 校验 + 自动文档
+```
+
+## FastAPI 学习路径
+
+```
+1. 基本路由 → app.get/post/put/delete
+2. Pydantic 模型 → BaseModel, Field, validator
+3. 依赖注入 → Depends, 可复用组件
+4. 异步 → async/await, 协程
+5. 数据库 → SQLAlchemy + FastAPI（你已经有 SQLAlchemy 经验）
+6. 测试 → TestClient（基于 httpx，类似 Flask 的 test_client）
+7. 部署 → Uvicorn + Gunicorn
+```
+
+## 总结
+
+```
+Flask 是"够用"              —— 稳定、灵活、社区大
+FastAPI 是"现代化"           —— 快、安全、自动文档
+Django 是"一站式"            —— 大而全、适合大项目
+
+你的场景：继续用 Flask 没问题
+学习 FastAPI 的价值：打开新思路，以后写新项目用
+```
+
+---
+
+# Rust — 系统级语言
+
+## Rust 是什么？
+
+Mozilla 开发（2015年发布），现在由 Rust 基金会维护。
+
+核心承诺：**内存安全，不需要垃圾回收（GC）**。
+
+```
+传统情况：要么手动管理内存（C/C++，容易出 bug），要么 GC 自动管理（Java/Python，性能损失）
+Rust 的方案：编译时检查内存安全，零运行时开销
+```
+
+## Rust 的核心创新：所有权（Ownership）
+
+这是 Rust 最独特、最重要的概念。
+
+```
+┌────────── 三个规则 ──────────┐
+│                              │
+│ 1. 每个值有且只有一个所有者    │
+│ 2. 值可以被借用（引用）       │
+│ 3. 值不能有两个可变引用同时存在 │
+│                              │
+└──────────────────────────────┘
+```
+
+### 规则1：所有权转移
+```rust
+fn main() {
+    let s1 = String::from("发酵罐数据");
+    let s2 = s1;  // 所有权从 s1 转移到 s2
+    
+    // println!("{}", s1);  // ❌ 编译错误！s1 的所有权已转移
+    println!("{}", s2);     // ✅ s2 现在是所有者
+}
+```
+
+对比 Python：
+```python
+s1 = "发酵罐数据"
+s2 = s1
+print(s1)  # Python 可以，因为 Python 所有变量都是引用
+# 但 Python 有 GC，需要运行时跟踪
+# Rust 所有权的设计让编译器在编译时就搞定了，不需要 GC
+```
+
+### 规则2：借用（Borrowing）
+```rust
+fn calculate(data: &String) {  // & = 借用，不拿走所有权
+    println!("数据: {}", data);
+}
+
+fn main() {
+    let s = String::from("发酵数据");
+    calculate(&s);  // 借给函数用
+    println!("{}", s);  // ✅ 所有权还在我这
+}
+```
+
+### 规则3：可变引用唯一性
+```rust
+let mut data = String::from("传感器数据");
+
+let r1 = &mut data;
+// let r2 = &mut data;  // ❌ 编译错误！不能同时有两个可变引用
+
+// 解决：用完一个再用下一个
+println!("{}", r1);
+let r2 = &mut data;  // ✅ r1 已用完了
+```
+
+**为什么有这个限制？防止数据竞争（Data Race）。**
+数据竞争是多线程编程中最难找的 bug。Rust 编译时就帮你排除了。
+
+## Rust 代码示例
+
+```rust
+use std::collections::HashMap;
+
+// 结构体（类似 Python 的 dataclass）
+#[derive(Debug)]
+struct Batch {
+    id: u32,
+    product: String,
+    temperature: f64,
+}
+
+// 方法
+impl Batch {
+    fn is_normal(&self) -> bool {
+        self.temperature >= 30.0 && self.temperature <= 40.0
+    }
+}
+
+fn main() {
+    // Vec（类似 Python 列表）
+    let batches = vec![
+        Batch { id: 1, product: "液体酶".into(), temperature: 36.5 },
+        Batch { id: 2, product: "益生菌".into(), temperature: 37.2 },
+    ];
+
+    // HashMap（类似 Python 字典）
+    let mut lookup: HashMap<u32, &Batch> = HashMap::new();
+    for batch in &batches {
+        lookup.insert(batch.id, batch);
+    }
+
+    // 迭代器链式操作（类似 Python 列表推导）
+    let normal: Vec<&Batch> = batches.iter()
+        .filter(|b| b.is_normal())
+        .collect();
+
+    println!("正常批次: {:?}", normal);
+}
+```
+
+## Rust vs C++ vs Python
+
+| 维度 | Python | C++ | Rust |
+|------|--------|-----|------|
+| **内存安全** | GC 保护 | 手工管理（易错） | 编译期保证 |
+| **性能** | 慢 | 极快 | 极快 |
+| **学习曲线** | 低 | 极高 | 高 |
+| **开发速度** | 快 | 慢 | 中 |
+| **并发安全** | GIL 限制 | 手动加锁 | 编译期保证 |
+| **包管理** | pip | 混乱 | Cargo（统一） |
+| **适用场景** | 胶水代码 | 引擎/游戏 | 系统工具/基础设施 |
+| **就业** | 多 | 多 | 增长最快 |
+
+## Rust 在 Python 生态中的应用
+
+很多你常用的 Python 工具正在被 Rust 重写，以获得 10-100 倍性能提升：
+
+| Python 工具 | Rust 替代 | 性能提升 |
+|------------|-----------|---------|
+| pytest 的部分功能 | **pytest-rs** | 2-5x |
+| flake8 + isort | **ruff** | 50-100x |
+| black | **ruff format** | 50-100x |
+| pip 解析依赖 | **uv** | 10-20x |
+| pylint | **ruff check** | 100x+ |
+| pip-tools | **uv pip** | 10x |
+
+## 你的项目跟 Rust 的关系
+
+```
+你需要写 Rust 吗？ ❌ 不需要
+
+你应该了解 Rust 吗？ ✅ 应该
+
+了解它能帮你什么？
+  1. 理解 Python 工具的加速原理（为什么 ruff 比 flake8 快100x）
+  2. 理解内存管理（有助于写更好的 Python C扩展）
+  3. 系统编程思维（嵌入式传感器采集可能用得上）
+```
+
+## Rust 学习路径（如果想学）
+
+```
+1. 安装 → rustup.rs
+2. 入门 → 变量、函数、控制流（类似 C）
+3. 核心 → 所有权、借用、生命周期
+4. 进阶 → 结构体、枚举、模式匹配
+5. 实战 → 写一个 CLI 工具
+6. 高级 → 并发、unsafe、FFI
+```
+
+最好的入门资源：**Rust 官方书** (doc.rust-lang.org/book)
+
+---
+
+# GraphQL — API 查询语言
+
+## GraphQL 是什么？
+
+Facebook 开发（2015年开源），用于替代 REST 的 API 规范。
+
+**核心思想：客户端精确指定需要哪些字段，不多不少。**
+
+```
+REST 方式（你现在用的方式）：
+  GET /api/batches/1
+  → 返回整个 Batch 对象，包括你不需要的字段
+  → 如果要关联数据，需要调多个接口
+
+GraphQL 方式：
+  query {
+    batch(id: 1) {
+      id
+      batchNo
+      product { name }
+      equipment { status }
+    }
+  }
+  → 只返回你要的字段
+  → 一个请求拿到所有关联数据
+```
+
+## REST vs GraphQL
+
+### REST 的痛点（你的项目正在经历的）
+
+```python
+# 你的 /dingtalk/webhook 接口返回全部数据
+def handle_query(content):
+    if q == "查车间":
+        # 返回所有车间信息，包括用户不需要的
+        return """
+        发酵车间: 运行中, 温度37°C, pH6.0-6.7, 罐压0.05MPa...
+        提取车间: 运行中, 粗滤浊度<5EBC, 精滤浊度<1EBC...
+        干燥塔: 运行中, 进风温度180°C...
+        ...10个车间全部返回
+        """
+```
+
+问题：
+1. 用户只想查"发酵车间"，但你返回了所有车间
+2. 用户可能想查"发酵车间的pH值"，但你没有独立的 pH 接口
+3. 如果要关联查询（"发酵车间当前在产什么批次"），需要调多次
+
+### GraphQL 的解决方式
+
+```graphql
+# 查询语言（由客户端决定要什么）
+query {
+  workshops {
+    name
+    status
+    params {
+      temperature
+      ph
+    }
+    currentBatch {
+      batchNo
+      productName
+    }
+  }
+}
+```
+
+```graphql
+# 只查发酵车间
+query {
+  workshop(name: "发酵车间") {
+    name
+    status
+    params { ph }
+  }
+}
+```
+
+```json
+// 返回结果（精确匹配）
+{
+  "data": {
+    "workshop": {
+      "name": "发酵车间",
+      "status": "运行中",
+      "params": {
+        "ph": "6.0-6.7"
+      }
+    }
+  }
+}
+```
+
+## GraphQL 的架构
+
+```
+┌──────────┐    GraphQL 查询     ┌──────────────────┐
+│  客户端   │ ─────────────────→  │                  │
+│  (浏览器) │                    │   GraphQL 服务端   │
+│          │ ←────────────────  │                  │
+└──────────┘   精确的 JSON      └──────┬───────────┘
+                                       │
+                          ┌────────────┼────────────┐
+                          ↓            ↓            ↓
+                     ┌──────────┐ ┌──────────┐ ┌──────────┐
+                     │ 数据库    │ │ 第三方API │ │ 内存数据  │
+                     └──────────┘ └──────────┘ └──────────┘
+```
+
+## TypeDef（类型定义）— Schema
+
+```graphql
+# 定义你的数据模型
+type Workshop {
+  id: ID!
+  name: String!
+  status: String!
+  temperature: Float
+  ph: String
+  currentBatch: Batch         # 关联到另一个类型
+}
+
+type Batch {
+  batchNo: String!
+  productName: String!
+  stage: String!
+  estimateDate: String
+}
+
+type Query {
+  workshops: [Workshop!]!     # 查询所有车间
+  workshop(name: String!): Workshop  # 按名称查车间
+  batches: [Batch!]!          # 查询所有批次
+}
+
+type Mutation {
+  updateWorkshopStatus(name: String!, status: String!): Workshop!
+  createBatch(input: BatchInput!): Batch!
+}
+```
+
+## Python 中的 GraphQL（使用 Strawberry）
+
+```python
+import strawberry
+
+@strawberry.type
+class Workshop:
+    name: str
+    status: str
+    temperature: float | None
+    ph: str | None
+
+@strawberry.type
+class Query:
+    @strawberry.field
+    def workshops(self) -> list[Workshop]:
+        # 从你的 FACTORY_DATA 中读取
+        return [
+            Workshop(
+                name=w["name"],
+                status=w["status"],
+                temperature=w["params"].get("温度"),
+                ph=w["params"].get("pH"),
+            )
+            for w in FACTORY_DATA["车间"]
+        ]
+
+    @strawberry.field
+    def workshop(self, name: str) -> Workshop | None:
+        for w in FACTORY_DATA["车间"]:
+            if w["name"] == name:
+                return Workshop(
+                    name=w["name"],
+                    status=w["status"],
+                    ...
+                )
+        return None
+
+# FastAPI 集成
+from strawberry.fastapi import GraphQLRouter
+
+schema = strawberry.Schema(query=Query)
+graphql_app = GraphQLRouter(schema)
+app.include_router(graphql_app, prefix="/graphql")
+
+# 访问 /graphql 就可以用 GraphQL 查询了！
+```
+
+## 你什么时候该用 GraphQL？
+
+```
+你的 REST API 够用 → 不需要 GraphQL
+你的 REST API 不多（就几个接口） → 不需要
+你的 API 被多个客户端调用 → 可以考虑
+你的客户端需要灵活组合数据 → GraphQL 最合适
+
+对你项目的判断：
+  现在不需要。你的 API 只有 5 个端点，用户就 1 个（钉钉群）
+  GraphQL 的优势体现不出来
+```
+
+## 总结
+
+```
+REST     = 饭店套餐   — 固定搭配，方便简单
+GraphQL = 自助餐     — 你想吃什么自己选
+          但你需要知道有什么菜（了解 Schema）
+
+你的场景：继续用 REST（就你自己用，没必要上 GraphQL）
+但理解 GraphQL 的 Schema 思想：精确描述你的数据模型
+```
+
+---
+
+# Docker & K8s — 容器化部署
+
+## Docker 是什么？
+
+**把你的应用和它需要的环境打包成一个"集装箱"，在任何机器上都能跑。**
+
+```
+传统部署的问题：
+  "在我电脑上能跑啊！"
+  → 环境不一致（Python版本、依赖库、系统配置）
+
+Docker 的解决方式：
+  你的代码 + Python + pip依赖 + 配置文件 = 一个镜像
+  这个镜像在 你的电脑 / 服务器 / 同事电脑 上跑起来一样
+```
+
+## 你已经有的 Docker 配置
+
+你的 `deploy/` 目录已经包含了完整的 Docker 配置：
+
+```
+deploy/
+├── Dockerfile              ← Flask 服务的镜像构建
+├── docker-compose.yml      ← 多服务编排（6个服务）
+├── nginx.conf              ← 反向代理
+├── prometheus/prometheus.yml       ← 监控
+├── grafana/                        ← 可视化
+├── mosquitto/mosquitto.conf        ← MQTT
+└── requirements.txt
+```
+
+### 你的 docker-compose.yml 的 6 个服务
+
+```
+xiaov-flask-app     ← Flask 工厂机器人（你的主服务）
+xiaov-mqtt-broker   ← MQTT 消息队列（工业设备通信）
+xiaov-prometheus    ← 指标采集（CPU、内存、传感器数据）
+xiaov-grafana       ← 可视化大屏（Prometheus 的数据展示）
+xiaov-node-exporter ← 服务器监控（CPU/内存/磁盘/网络）
+xiaov-nginx         ← 反向代理 + 负载均衡
+```
+
+## Docker 核心概念
+
+```
+┌──────────────────────────────────────────────────────┐
+│                     Docker 架构                        │
+│                                                       │
+│  ┌─────────────┐    ┌─────────────┐    ┌──────────┐  │
+│  │  容器 A     │    │  容器 B     │    │  容器 C   │  │
+│  │ (Flask)     │    │ (MQTT)     │    │ (Grafana) │  │
+│  └──────┬──────┘    └──────┬──────┘    └─────┬────┘  │
+│         │                  │                  │       │
+│         └──────────────────┼──────────────────┘       │
+│                            ↓                          │
+│                    ┌──────────────┐                   │
+│                    │  Docker Engine │                  │
+│                    │  (容器运行时)   │                  │
+│                    └──────┬───────┘                   │
+│                           ↓                           │
+│                    ┌──────────────┐                   │
+│                    │  操作系统     │                   │
+│                    │  (Linux内核)  │                   │
+│                    └──────────────┘                   │
+└──────────────────────────────────────────────────────┘
+```
+
+### 镜像 vs 容器
+```
+镜像（Image） = 做菜的菜谱（只读模板）
+容器（Container）= 按照菜谱做的菜（运行中的实例）
+
+镜像可以同时启动多个容器：
+  docker run flask-image → 容器A（端口5001）
+  docker run flask-image → 容器B（端口5002）
+```
+
+### Dockerfile 基础
+```dockerfile
+# 你的 deploy/Dockerfile 解析
+
+# 基于 Python 3.10 官方镜像
+FROM python:3.10-slim
+
+# 作者信息
+LABEL maintainer="xiaoV Team <dev@xiaov.io>"
+
+# 设置工作目录
+WORKDIR /app
+
+# 先安装依赖（分层缓存优化）
+COPY deploy/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 再复制代码（依赖层不变，代码层变）
+COPY . .
+
+# 暴露端口
+EXPOSE 5001
+
+# 启动命令
+CMD ["python", "factory_bot_server.py"]
+```
+
+**Dockerfile 的分层缓存：**
+```
+每一行指令产生一个"层"（Layer）
+修改代码时，只有 COPY . . 这层会重新构建
+前面的基础镜像、pip install 层会从缓存中复用
+→ 第二次构建只需要几秒而不是几分钟
+```
+
+## 常用 Docker 命令
+
+```bash
+# 构建镜像
+docker build -t xiaov-factory-bot:latest .
+
+# 运行容器
+docker run -d --name xiaov-flask-app -p 5001:5001 xiaov-factory-bot
+
+# 查看运行中的容器
+docker ps
+
+# 查看日志
+docker logs xiaov-flask-app -f
+
+# 进入容器
+docker exec -it xiaov-flask-app sh
+
+# 停止/启动/删除
+docker stop xiaov-flask-app
+docker start xiaov-flask-app
+docker rm xiaov-flask-app
+
+# 一键启动所有服务（你的 docker-compose.yml）
+docker compose up -d
+
+# 查看所有服务状态
+docker compose ps
+
+# 停止所有服务
+docker compose down
+```
+
+## Docker Compose 编排
+
+```yaml
+# 你的 docker-compose.yml 中的关键模式
+
+services:
+  flask-app:
+    build: .               # 从 Dockerfile 构建
+    ports:                 # 端口映射
+      - "5001:5001"        # 宿主机:容器内
+    volumes:               # 数据持久化
+      - ./data:/app/data   # 宿主机目录:容器目录
+    environment:           # 环境变量
+      - FLASK_ENV=production
+    depends_on:            # 依赖关系
+      - mosquitto          # 先启动 MQTT
+    restart: unless-stopped  # 自动重启
+
+  grafana:
+    image: grafana/grafana  # 直接使用官方镜像
+    volumes:
+      - grafana-data:/var/lib/grafana  # 命名卷（数据持久化）
+```
+
+## K8s（Kubernetes）— 容器编排
+
+### 什么时候需要 K8s？
+
+```
+Docker：管理单个容器
+Docker Compose：管理一组容器（一台机器）
+Kubernetes：管理成百上千个容器（多台机器集群）
+
+你的项目需要 K8s 吗？ ❌ 不需要
+
+什么时候需要 K8s？
+  - 5台以上服务器
+  - 服务需要自动伸缩（高峰期多开几个，低峰期关掉）
+  - 需要零停机更新（滚动更新）
+  - 需要自动故障恢复（某台机器挂了，自动迁移）
+```
+
+### K8s 的核心概念（了解即可）
+
+```
+┌────────────────────────────────────────────────┐
+│                  K8s 集群                        │
+│                                                    │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+│  │ Master   │  │ Node 1   │  │ Node 2   │         │
+│  │ (控制面)  │  │ ┌──────┐ │  │ ┌──────┐ │         │
+│  │          │  │ │Pod   │ │  │ │Pod   │ │         │
+│  │          │  │ │Flask │ │  │ │Flask │ │         │
+│  └──────────┘  │ │:5001 │ │  │ │:5002 │ │         │
+│                │ └──────┘ │  │ └──────┘ │         │
+│                │ ┌──────┐ │  │ ┌──────┐ │         │
+│                │ │Grafana│ │  │ │MQTT  │ │         │
+│                │ └──────┘ │  │ └──────┘ │         │
+│                └──────────┘  └──────────┘         │
+└────────────────────────────────────────────────────┘
+```
+
+### 核心概念
+```
+Pod        = 最小的运行单位（一个或多个容器）
+Deployment = 告诉 K8s 我要运行几个 Pod，出问题自动恢复
+Service    = 固定的 IP 和端口（Pod 挂了重建，Service 地址不变）
+ConfigMap  = 配置文件（类似 docker-compose 的 environment）
+Secret     = 密码/密钥（不要在代码里写死！）
+Ingress    = 外部访问入口（类似 Nginx）
+```
+
+### 一句话总结
+
+```
+Docker           = 你有一个搬家的箱子（容器）
+Docker Compose   = 你有6个箱子，知道怎么摆放（单机编排）
+K8s              = 你有一个自动化仓库，箱子自己会找到位置（集群编排）
+
+你的项目现在：Docker 就够了，甚至不用 Docker（直接 python run.py 也行）
+未来如果：要做全厂级 MES + 微服务 → 考虑 Docker Compose
+K8s：等服务器超过 5 台再说
+```
+
+## 对你项目的实际建议
+
+```
+1. 不用急着容器化
+   你现在 python3 factory_bot_server.py 直接跑就行
+   Docker 解决的是"环境一致性问题"，你一个人开发不需要
+
+2. 如果部署到服务器
+   可以用 Docker Compose（你的 deploy/ 已经配好了）
+   好处：一键启动所有依赖（Flask + MQTT + Prometheus + Grafana）
+
+3. 绝对不要碰 K8s
+   你的项目规模完全不需要
+   K8s 学习成本极高，对于小项目是负收益
+```
+
+---
+
+# 数据库设计深化 — SQL/索引/事务
+
+## 你目前在用的数据方式
+
+你的 `FACTORY_DATA` 字典（factory_bot_server.py 中）：
+
+```python
+FACTORY_DATA = {
+    "车间": [          ← 列表，按顺序存储
+        {"name": "发酵车间", "status": "运行中", ...},
+        ...
+    ],
+    "产品": [          ← 列表
+        {"name": "液体酶制剂", "batch": "L-20260421", ...},
+        ...
+    ],
+    "设备": [          ← 列表
+        {"name": "发酵罐", "型号": "50m³×12台", ...},
+        ...
+    ],
+    "当前批次": {       ← 字典，按 batch_id 索引
+        "L-20260421": {"产品": "液体酶15B", ...},
+        ...
+    },
+}
+```
+
+**优点**：启动时加载到内存，查询极快（微秒级）
+**缺点**：数据写在代码里，改数据要改代码重启；无法做复杂查询
+
+## 你已经有的数据库设计
+
+你的 `database/mes_schema_ddl.py` 定义了 MES 数据库的完整表结构。
+
+核心表：
+```
+org_company           ← 公司
+org_workshop          ← 车间
+prod_batch            ← 生产批次（核心表）
+prod_process_param    ← 工艺参数
+qual_inspection       ← 质检记录
+eqp_device            ← 设备
+eqp_maintenance       ← 设备维保
+```
+
+## 核心概念深化
+
+### 1. 索引（Index）— 为什么查询会慢？
+
+**无索引查询：全表扫描**
+
+```
+SELECT * FROM prod_batch WHERE batch_no = 'L-20260421';
+
+数据库怎么做：
+  从第1行开始，逐行看 batch_no 是否匹配
+  100 行 → 对比 100 次
+  1000 万行 → 对比 1000 万次（太慢了！）
+```
+
+**有索引查询：B+树查找**
+
+```
+CREATE INDEX idx_batch_no ON prod_batch(batch_no);
+
+数据库怎么做：
+  B+树索引类似"字典的拼音索引"
+  "L-20260421" → 索引定位到 "L-202..." 开头的位置
+  直接跳到那一行
+  1000 万行 → 只需要 3-4 次 IO（毫秒级）
+```
+
+**索引的代价：**
+```
+✅ 查询快 100-10000 倍
+❌ 写数据变慢（插入时要更新索引）
+❌ 占用磁盘空间
+❌ 太多索引反而降低性能（索引维护开销）
+
+建议：给经常查询的字段建索引
+  batch_no        ✅ 经常查
+  product_name    ✅ 经常查
+  status          ⚠️ 选择性低的列（只有几个值），索引效果差
+  created_at      ✅ 经常按时间排序
+```
+
+### 2. 事务（Transaction）— 数据一致性
+
+```python
+# 你的当前代码：没有事务
+def update_batch_status(batch_no, new_status):
+    """更新批次状态"""
+    batch = find_batch(batch_no)
+    batch["status"] = new_status
+    save_to_db(batch)
+    send_notification(batch)  # 如果这行崩溃了，批次状态已更新但没有通知！
+    # 数据库处于"不一致"状态
+```
+
+```python
+# 正确的做法：事务
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+engine = create_engine("sqlite:///mes.db")
+
+def update_batch_status(batch_no, new_status):
+    with Session(engine) as session:
+        try:
+            batch = session.query(Batch).filter(
+                Batch.batch_no == batch_no
+            ).with_for_update().first()  # 加锁防止并发修改
+
+            batch.status = new_status
+            send_notification(batch)     # 发送通知
+
+            session.commit()             # 要么全部成功
+        except Exception:
+            session.rollback()           # 要么全部回滚
+```
+
+**ACID 四大特性：**
+```
+A（原子性）：批次状态和通知，要么都执行，要么都不执行
+C（一致性）：数据始终满足约束（状态不能从"已完成"变回"发酵中"）
+I（隔离性）：两个用户同时修改不同批次，互相不影响
+D（持久性）：commit 后数据不会丢失
+```
+
+**隔离级别（隔离性越高，并发性能越低）：**
+
+| 级别 | 脏读 | 不可重复读 | 幻读 | 性能 |
+|------|------|-----------|------|------|
+| Read Uncommitted | ✅ 可能 | ✅ 可能 | ✅ 可能 | 最快 |
+| Read Committed | ❌ 安全 | ✅ 可能 | ✅ 可能 | 快 |
+| Repeatable Read | ❌ 安全 | ❌ 安全 | ✅ 可能 | 中 |
+| Serializable | ❌ 安全 | ❌ 安全 | ❌ 安全 | 最慢 |
+
+```
+你的 SQLite 默认：Read Uncommitted（因为是单用户系统）
+如果你换 PostgreSQL：默认 Read Committed
+建议：业务逻辑简单时用默认值就行
+```
+
+### 3. SQL 优化技巧
+
+```sql
+-- ❌ 慢：SELECT *
+SELECT * FROM prod_batch WHERE product_name LIKE '%酶%';
+
+-- ✅ 快：只查需要的字段
+SELECT batch_no, product_name, status 
+FROM prod_batch 
+WHERE product_name LIKE '%酶%';
+
+-- ❌ 慢：函数用在索引列上
+SELECT * FROM prod_batch 
+WHERE DATE(created_at) = '2026-04-28';
+-- 每条记录都要先算 DATE()，索引失效
+
+-- ✅ 快：范围查询
+SELECT * FROM prod_batch 
+WHERE created_at >= '2026-04-28 00:00:00' 
+  AND created_at < '2026-04-29 00:00:00';
+-- 可以用到 created_at 的索引
+
+-- ❌ 慢：N+1 查询（代码中）
+batches = session.query(Batch).all()  -- 1次查询
+for batch in batches:
+    print(batch.workshop.name)  -- N次查询（每次访问都查数据库）
+
+-- ✅ 快：预加载（Eager Loading）
+from sqlalchemy.orm import joinedload
+batches = session.query(Batch).options(
+    joinedload(Batch.workshop)      -- JOIN 一次查完
+).all()
+```
+
+### 4. 数据迁移（Migration）— 数据库版本控制
+
+```python
+# 你现在的做法：改表结构全靠手动
+# 1. 新建一个 SQL 文件
+# 2. 手动在数据库里执行
+# 3. 完全不知道之前改了啥
+
+# 正确的做法：Alembic 迁移
+# terminal
+flask db init        # 初始化迁移环境
+flask db migrate -m "add equipment table"  # 生成迁移脚本
+flask db upgrade     # 应用到数据库
+
+# 迁移脚本看起来像这样（自动生成）：
+"""
+Revision ID: 1234abcd
+Revises: 5678efgh
+Create Date: 2026-04-28 15:30:00
+
+def upgrade():
+    op.create_table(
+        'eqp_equipment',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('name', sa.String(100)),
+        ...
+    )
+
+def downgrade():
+    op.drop_table('eqp_equipment')
+"""
+```
+
+### 5. 你的实际建议
+
+```
+你的 FACTORY_DATA 字典够用吗？ ✅ 够用
+  查询场景简单（就你一个人用）
+  数据量小（几十条）
+  不需要做复杂 SQL 查询
+
+什么时候该换数据库？
+  1. 数据量超过 1 万条（字典加载占用内存太多）
+  2. 需要多人同时录入数据（需要事务+锁）
+  3. 需要做报表统计（需要 group by、join）
+  4. 需要数据持久化（重启不丢失）
+
+迁移路径：
+  FACTORY_DATA 字典 → SQLite（你已经有 database/ 设计了）
+                     → PostgreSQL（如果要做真正的 MES，推荐这个）
+```
+
+### 6. 对整个学习的总结
+
+```
+你已经学到了这些：
+
+✅ Flask 工厂模式 + 蓝图（RealWorld 81k⭐）
+✅ RAG 系统设计（LlamaIndex 38k⭐）
+✅ 分布式架构思维（System Design Primer 290k⭐）
+✅ Flask vs Django vs FastAPI 对比
+✅ Rust 的核心创新（所有权）
+✅ GraphQL 的思想
+✅ Docker 容器化（你的 deploy/ 配置解析）
+✅ 数据库设计深化
+
+这个笔记会跟随你的学习持续增长。
+每次学新东西，往这里加一章。
+```
+
+
+
+
+
+
 
 
