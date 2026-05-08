@@ -1,0 +1,3439 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>xiaoV MES 控制台</title>
+<style>
+  /* ═══════════════════════════════════════════
+     工业控制台设计语言
+     参考：SCADA系统 / Grafana工业Dark / ABB 800xA
+     ═══════════════════════════════════════════ */
+
+  :root {
+    --bg-primary: #0a0e14;       /* 深空黑 */
+    --bg-panel: #111827;          /* 面板背景 */
+    --bg-card: #1a2332;           /* 卡片 */
+    --bg-card-hover: #1e2942;     /* 卡片悬浮 */
+    --border: #1f2d42;             /* 边框 */
+    --border-bright: #2d4a6f;     /* 高亮边框 */
+
+    --text-primary: #e2e8f0;      /* 主文字 */
+    --text-secondary: #8b9ab5;     /* 次文字 */
+    --text-dim: #4a5d7a;          /* 暗淡文字 */
+
+    --green: #00d4aa;             /* 正常/运行 */
+    --green-dim: #00d4aa33;       /* 正常背景 */
+    --amber: #ffb020;             /* 告警/注意 */
+    --amber-dim: #ffb02022;
+    --red: #ff4757;               /* 严重/停机 */
+    --red-dim: #ff475722;
+    --blue: #3b9eff;              /* 信息/进度 */
+    --blue-dim: #3b9eff22;
+    --purple: #a855f7;            /* 特殊状态 */
+
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+    --panel-gap: 12px;
+    --panel-radius: 6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-ui);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.4;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* ─── 顶部导航 ─── */
+  .topbar {
+    height: 52px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .topbar-logo {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: 0.5px;
+    font-family: var(--font-mono);
+  }
+
+  .topbar-logo span { color: var(--text-secondary); font-weight: 400; }
+
+  .topbar-nav { display: flex; gap: 4px; }
+  .topbar-nav a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    transition: all 0.15s;
+  }
+  .topbar-nav a:hover { background: var(--border); color: var(--text-primary); }
+  .topbar-nav a.active { background: var(--border-bright); color: var(--text-primary); }
+
+  .topbar-status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse-green 2s infinite;
+  }
+  .status-dot.amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .status-dot.red { background: var(--red); box-shadow: 0 0 6px var(--red); animation: pulse-red 1s infinite; }
+
+  @keyframes pulse-green { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  @keyframes pulse-red { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* ─── 主布局 ─── */
+  .main {
+    display: grid;
+    grid-template-columns: 260px 1fr 280px;
+    grid-template-rows: auto 1fr;
+    gap: var(--panel-gap);
+    padding: var(--panel-gap);
+    height: calc(100vh - 52px);
+  }
+
+  /* ─── 面板通用 ─── */
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--panel-radius);
+    overflow: hidden;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+  }
+
+  .panel-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+
+  .panel-body { padding: 12px 14px; }
+
+  /* ─── 左侧设备状态 ─── */
+  .left-col {
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: var(--panel-gap);
+    overflow-y: auto;
+  }
+
+  /* 发酵罐单元 */
+  .tank-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--panel-radius);
+    padding: 12px;
+    position: relative;
+    transition: border-color 0.2s;
+  }
+  .tank-card.active { border-color: var(--green); box-shadow: 0 0 12px var(--green-dim); }
+  .tank-card.warning { border-color: var(--amber); }
+  .tank-card.alert { border-color: var(--red); animation: border-pulse 1.5s infinite; }
+
+  @keyframes border-pulse { 0%,100% { border-color: var(--red); } 50% { border-color: #ff475744; } }
+
+  .tank-id {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+  }
+  .tank-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+  .tank-stage {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--blue-dim);
+    color: var(--blue);
+    border: 1px solid #3b9eff44;
+    margin-bottom: 10px;
+  }
+  .tank-params {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .tank-param {}
+  .tank-param-label { font-size: 10px; color: var(--text-dim); margin-bottom: 1px; }
+  .tank-param-value {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .tank-param-value.temp { color: var(--red); }
+  .tank-param-value.ph { color: var(--blue); }
+  .tank-param-value.do { color: var(--green); }
+  .tank-param-value.stir { color: var(--purple); }
+
+  /* 进度条 */
+  .tank-progress {
+    margin-top: 8px;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .tank-progress-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+
+  /* 设备状态列表 */
+  .equip-list { display: flex; flex-direction: column; gap: 6px; }
+  .equip-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    background: var(--bg-card);
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .equip-row-name { color: var(--text-primary); }
+  .equip-row-type { font-size: 10px; color: var(--text-dim); }
+  .equip-status {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .equip-status.running { background: var(--green-dim); color: var(--green); border: 1px solid #00d4aa44; }
+  .equip-status.idle { background: var(--border); color: var(--text-dim); }
+  .equip-status.fault { background: var(--red-dim); color: var(--red); border: 1px solid #ff475744; }
+  .equip-status.maintenance { background: var(--amber-dim); color: var(--amber); border: 1px solid #ffb02044; }
+
+  /* ─── 中部实时曲线 ─── */
+  .center-col { display: flex; flex-direction: column; gap: var(--panel-gap); overflow: hidden; }
+
+  .chart-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .chart-container { flex: 1; position: relative; min-height: 0; }
+
+  .chart-legend {
+    display: flex;
+    gap: 16px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-card);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .legend-dot.temp { background: var(--red); }
+  .legend-dot.ph { background: var(--blue); }
+  .legend-dot.do { background: var(--green); }
+
+  /* 告警日志 */
+  .alert-log { max-height: 200px; overflow-y: auto; }
+  .alert-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .alert-item:last-child { border-bottom: none; }
+  .alert-time { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+  .alert-batch { font-family: var(--font-mono); color: var(--text-secondary); font-size: 11px; min-width: 100px; }
+  .alert-message { color: var(--text-primary); flex: 1; }
+  .alert-level-critical { color: var(--red); font-weight: 600; }
+  .alert-level-warning { color: var(--amber); }
+  .alert-level-info { color: var(--blue); }
+
+  /* ─── 右侧指标 ─── */
+  .right-col { display: flex; flex-direction: column; gap: var(--panel-gap); overflow-y: auto; }
+
+  /* KPI 卡片 */
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--panel-radius);
+    padding: 12px;
+    text-align: center;
+  }
+  .kpi-num {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--green);
+    line-height: 1;
+  }
+  .kpi-num.amber { color: var(--amber); }
+  .kpi-num.red { color: var(--red); }
+  .kpi-num.blue { color: var(--blue); }
+  .kpi-label { font-size: 10px; color: var(--text-dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* 工单列表 */
+  .order-list { display: flex; flex-direction: column; gap: 6px; }
+  .order-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 9px 11px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px;
+    align-items: center;
+  }
+  .order-name { font-size: 12px; color: var(--text-primary); }
+  .order-meta { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .order-badge {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .order-badge.pending { background: var(--border); color: var(--text-dim); }
+  .order-badge.in_progress { background: var(--blue-dim); color: var(--blue); border: 1px solid #3b9eff44; }
+  .order-badge.completed { background: var(--green-dim); color: var(--green); border: 1px solid #00d4aa44; }
+
+  /* 质量判定 */
+  .qc-panel {}
+  .qc-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .qc-item:last-child { border-bottom: none; }
+  .qc-batch { font-family: var(--font-mono); color: var(--text-secondary); font-size: 11px; }
+  .qc-result { font-weight: 600; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+  .qc-result.pass { background: var(--green-dim); color: var(--green); }
+  .qc-result.fail { background: var(--red-dim); color: var(--red); }
+  .qc-result.pending { background: var(--border); color: var(--text-dim); }
+
+  /* ─── 连接状态指示器 ─── */
+  .conn-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+  .conn-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .conn-dot.connected { background: var(--green); }
+  .conn-dot.disconnected { background: var(--red); animation: pulse-red 1s infinite; }
+
+  /* ─── 设备台账样式 ─── */
+  .equip-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .equip-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--panel-radius);
+    padding: 14px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .equip-card:hover { border-color: var(--border-bright); }
+  .equip-card.selected { border-color: var(--green); box-shadow: 0 0 8px var(--green-dim); }
+  .equip-card-name { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+  .equip-card-meta { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; }
+
+  /* 维保计划状态 */
+  .maint-status { font-size: 10px; font-family: var(--font-mono); padding: 2px 8px; border-radius: 10px; }
+  .maint-status.active { background: var(--green-dim); color: var(--green); border: 1px solid #00d4aa44; }
+  .maint-status.overdue { background: var(--red-dim); color: var(--red); border: 1px solid #ff475744; }
+  .maint-status.due-soon { background: var(--amber-dim); color: var(--amber); border: 1px solid #ffb02044; }
+  .maint-status.inactive { background: var(--border); color: var(--text-dim); }
+
+  /* 维保计划列表 */
+  .maint-plan-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .maint-plan-table th { text-align: left; padding: 8px 10px; background: var(--bg-card); color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+  .maint-plan-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); color: var(--text-primary); }
+  .maint-plan-table tr:hover td { background: var(--bg-card); }
+  .maint-plan-table tr.overdue td { background: var(--red-dim); }
+  .maint-plan-table tr.due-soon td { background: var(--amber-dim); }
+
+  /* 新建计划表单 */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 11px; color: var(--text-secondary); }
+  .form-group input, .form-group select {
+    background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 4px; padding: 7px 10px; font-size: 12px; font-family: var(--font-ui);
+  }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--border-bright); }
+  .btn { padding: 7px 16px; border-radius: 4px; font-size: 12px; cursor: pointer; border: none; font-weight: 600; }
+  .btn-primary { background: var(--green); color: #000; }
+  .btn-secondary { background: var(--border); color: var(--text-primary); }
+
+  /* Tab content */
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ─── 数字微动画 ═── */
+  .num-flash {
+    animation: numflash 0.4s ease;
+  }
+  @keyframes numflash {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; transform: scale(1.05); }
+    100% { opacity: 1; }
+  }
+
+  /* ─── 可点击元素 ═── */
+  .clickable { cursor: pointer; transition: all 0.15s; }
+  .clickable:hover { transform: translateY(-1px); }
+  .kpi-card.clickable:hover { border-color: var(--border-bright); box-shadow: 0 0 16px var(--green-dim); }
+  .tank-card.clickable { cursor: pointer; }
+  .tank-card.clickable:hover { border-color: var(--border-bright); box-shadow: 0 0 12px rgba(0,212,170,0.2); }
+
+  /* ─── 通用 Overlay ═── */
+  .detail-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: var(--bg-primary);
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .detail-overlay.active { display: block; }
+  .detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .detail-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+  }
+  .detail-close {
+    background: var(--border);
+    color: var(--text-primary);
+    border: 1px solid var(--border-bright);
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .detail-close:hover { background: var(--border-bright); }
+  .detail-section {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .detail-section-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .detail-section-body { padding: 14px; }
+
+  /* Tank Detail specific */
+  .tank-detail-hero {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .tank-hero-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    text-align: center;
+  }
+  .tank-hero-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .tank-hero-value { font-family: var(--font-mono); font-size: 28px; font-weight: 700; line-height: 1; }
+  .tank-hero-value.temp { color: var(--red); }
+  .tank-hero-value.ph { color: var(--blue); }
+  .tank-hero-value.do { color: var(--green); }
+  .tank-hero-value.stir { color: var(--purple); }
+  .tank-hero-unit { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  /* Orders Table */
+  .orders-table { width: 100%; border-collapse: collapse; }
+  .orders-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    color: var(--text-dim);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .orders-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+  .orders-table tr:hover td { background: var(--bg-card); }
+  .orders-table tr.overdue td { background: var(--red-dim); }
+  .filter-bar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .filter-bar select, .filter-bar input {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .filter-bar select:focus, .filter-bar input:focus { outline: none; border-color: var(--border-bright); }
+
+  /* Alert Detail */
+  .alert-detail-meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .alert-meta-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+  }
+  .alert-meta-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .alert-meta-value { font-family: var(--font-mono); font-size: 18px; font-weight: 600; }
+  .disposal-item {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .disposal-item:last-child { border-bottom: none; }
+  .disposal-time { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); min-width: 140px; }
+  .disposal-content { flex: 1; color: var(--text-primary); }
+  .disposal-result { font-family: var(--font-mono); font-size: 11px; min-width: 60px; text-align: center; }
+  .result-badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; }
+  .result-badge.resolved { background: var(--green-dim); color: var(--green); }
+  .result-badge.active { background: var(--red-dim); color: var(--red); }
+  .result-badge.acknowledged { background: var(--amber-dim); color: var(--amber); }
+  .result-badge.pending { background: var(--border); color: var(--text-dim); }
+
+  /* ─── 滚动条 ─── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
+
+  /* ─── 质量Tab ─── */
+  .quality-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: var(--bg-primary);
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .quality-overlay.active { display: block; }
+  .quality-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+  .quality-tab-btn {
+    padding: 6px 18px;
+    border-radius: 4px 4px 0 0;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+  .quality-tab-btn:hover { color: var(--text-primary); background: var(--border); }
+  .quality-tab-btn.active { color: var(--green); border-color: var(--border); border-bottom-color: var(--bg-primary); background: var(--bg-panel); }
+  .quality-panel { display: none; }
+  .quality-panel.active { display: block; }
+  .spec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .spec-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--panel-radius);
+    padding: 12px;
+  }
+  .spec-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .spec-card-id { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+  .spec-card-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--blue-dim);
+    color: var(--blue);
+  }
+  .spec-params { display: flex; flex-direction: column; gap: 4px; }
+  .spec-param {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .spec-param:last-child { border-bottom: none; }
+  .spec-param-name { color: var(--text-secondary); }
+  .spec-param-range { font-family: var(--font-mono); color: var(--text-primary); }
+  .spec-form {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--panel-radius);
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .spec-form.full-width { grid-column: 1 / -1; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 11px; color: var(--text-secondary); }
+  .form-group input, .form-group select {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .qc-table { width: 100%; border-collapse: collapse; }
+  .qc-table th {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .qc-table td {
+    padding: 8px 10px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .qc-table tr:hover td { background: var(--bg-card-hover); }
+  .result-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .result-badge.pass { background: var(--green-dim); color: var(--green); }
+  .result-badge.fail { background: var(--red-dim); color: var(--red); }
+  .result-badge.warning { background: var(--amber-dim); color: var(--amber); }
+  .result-badge.pending { background: var(--border); color: var(--text-dim); }
+  .qc-detail-text { font-size: 11px; color: var(--red); margin-top: 2px; }
+  .review-btn {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    border: none;
+    background: var(--border-bright);
+    color: var(--text-primary);
+    transition: all 0.15s;
+  }
+  .review-btn:hover { background: var(--green); color: #000; }
+  .review-form {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--panel-radius);
+    padding: 14px;
+    margin-top: 12px;
+    display: none;
+  }
+  .review-form.active { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 8px; align-items: end; }
+</style>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<div class="topbar">
+  <div class="topbar-logo">xiaoV <span>/ MES 控制台</span></div>
+  <div class="topbar-nav">
+    <a href="#" onclick="showTab('main'); return false;" class="active">生产总览</a>
+    <a href="#">工单管理</a>
+    <a href="#">批次追踪</a>
+    <a href="#" onclick="showQualityTab(); return false;">质量管理</a>
+    <a href="#" onclick="showTab('equipment'); return false;">设备台账</a>
+    <a href="#" onclick="showTab('report')">历史报表</a>
+    <a href="#" onclick="showTab('handover'); return false;">交接班</a>
+  </div>
+  <div class="topbar-status">
+    <div class="conn-indicator">
+      <div class="conn-dot disconnected" id="wsDot"></div>
+      <span id="wsStatus">未连接</span>
+    </div>
+    <div id="shiftStatusBar" style="display:none;align-items:center;gap:8px;font-size:11px;background:var(--bg-card);border:1px solid var(--border);padding:3px 10px;border-radius:4px;">
+      <span id="shiftStatusDot" class="status-dot" style="width:5px;height:5px;"></span>
+      <span id="shiftStatusText">—</span>
+    </div>
+    <div class="status-pill">
+      <div class="status-dot" id="systemDot"></div>
+      <span id="systemStatus">系统正常</span>
+    </div>
+    <div style="color:var(--text-dim); font-size:11px" id="clock">--:--:--</div>
+  </div>
+</div>
+
+<!-- 主布局 -->
+<div class="main">
+
+  <!-- ═══ 左侧：设备状态 ═══ -->
+  <div class="left-col">
+
+    <!-- 生产进度 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">生产概览</span>
+        <span style="font-size:11px;color:var(--text-dim)" id="today">--</span>
+      </div>
+      <div class="panel-body">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-num" id="kpi-total">-</div>
+            <div class="kpi-label">总工单</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-num blue" id="kpi-running">-</div>
+            <div class="kpi-label">进行中</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-num" id="kpi-completed">-</div>
+            <div class="kpi-label">已完成</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-num" id="kpi-yield">-</div>
+            <div class="kpi-label">收率%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 发酵罐状态 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">发酵罐监控</span>
+        <span style="font-size:10px;color:var(--green)">● 实时</span>
+      </div>
+      <div class="panel-body" id="tankContainer">
+        <!-- JS 动态填充 -->
+        <div style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px">加载中...</div>
+      </div>
+    </div>
+
+    <!-- 设备台账 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">设备状态</span>
+        <span style="font-size:10px;color:var(--text-dim)" id="equipCount">-</span>
+      </div>
+      <div class="panel-body">
+        <div class="equip-list" id="equipList">
+          <!-- JS 动态填充 -->
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ 中部：实时曲线 + 告警 ═══ -->
+  <div class="center-col">
+
+    <!-- 实时曲线 -->
+    <div class="panel chart-panel">
+      <div class="panel-header">
+        <span class="panel-title">发酵参数实时曲线</span>
+        <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim)" id="chartBatch">—</span>
+      </div>
+      <div class="chart-container" id="chartContainer">
+        <canvas id="stripChart" style="width:100%;height:100%;display:block"></canvas>
+      </div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot temp"></div>温度 °C</div>
+        <div class="legend-item"><div class="legend-dot ph"></div>pH 值</div>
+        <div class="legend-item"><div class="legend-dot do"></div>溶解氧 DO%</div>
+      </div>
+    </div>
+
+    <!-- 告警日志 -->
+    <div class="panel" style="flex-shrink: 0; max-height: 260px; display: flex; flex-direction: column;">
+      <div class="panel-header">
+        <span class="panel-title">告警记录</span>
+        <span id="alertCount" style="font-size:10px;color:var(--red)">0 条</span>
+      </div>
+      <div class="alert-log panel-body" id="alertLog" style="flex:1;overflow-y:auto">
+        <div style="color:var(--text-dim);font-size:12px;text-align:center;padding:16px">暂无告警</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ 右侧：工单 + 质检 ═══ -->
+  <div class="right-col">
+
+    <!-- 生产工单 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">工单列表</span>
+        <span style="font-size:10px;color:var(--text-dim)" id="orderCount">-</span>
+      </div>
+      <div class="panel-body" style="padding:8px;">
+        <div class="order-list" id="orderList">
+          <!-- JS 动态填充 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 报工面板 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">报工</span>
+        <button onclick="openReportModal()" style="background:var(--green);color:#000;border:none;padding:3px 10px;border-radius:4px;font-size:11px;cursor:pointer">+ 报工</button>
+      </div>
+      <div class="panel-body" style="padding:8px;">
+        <!-- 当前报工信息 -->
+        <div id="currentReportInfo" style="margin-bottom:8px;">
+          <div style="font-size:11px;color:var(--text-dim);padding:4px 0;">当前批次 / 工单</div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <span id="curBatchBadge" class="tank-stage">—</span>
+            <span id="curOrderBadge" class="order-badge pending">—</span>
+            <span id="curTarget" style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono)"></span>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--border);margin:6px 0;"></div>
+        <!-- 历史报工记录 -->
+        <div id="reportList">
+          <div style="color:var(--text-dim);font-size:12px;text-align:center;padding:12px">加载中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 质量检验 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">质量检验</span>
+        <span style="font-size:10px;color:var(--text-dim)" id="qcCount">-</span>
+      </div>
+      <div class="panel-body">
+        <div id="qcList">
+          <div style="color:var(--text-dim);font-size:12px;text-align:center;padding:12px">加载中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 今日告警统计 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">今日告警统计</span>
+      </div>
+      <div class="panel-body">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-num red" id="alertCritical">0</div>
+            <div class="kpi-label">严重</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-num amber" id="alertWarning">0</div>
+            <div class="kpi-label">警告</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-num blue" id="alertInfo">0</div>
+            <div class="kpi-label">提示</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-num" id="alertResolved">0</div>
+            <div class="kpi-label">已解除</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 设备台账浮层 -->
+<div id="equipmentTab" style="display:none;position:fixed;inset:0;z-index:200;background:var(--bg-primary);overflow-y:auto;padding:20px;">
+  <div style="max-width:1400px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="font-size:18px;font-weight:600;color:var(--text-primary);">设备台账 & 维保管理</div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button onclick="generateMaintPlans()" style="background:var(--amber);color:#000;border:none;padding:6px 16px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:600;">自动生成计划</button>
+        <button onclick="showTab('main')" style="background:var(--border);color:var(--text-primary);border:1px solid var(--border-bright);padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;">返回总览</button>
+      </div>
+    </div>
+
+    <!-- 设备卡片列表 -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">设备列表</div>
+      <div class="equip-detail-grid" id="equipDetailList"></div>
+    </div>
+
+    <!-- 维保状态摘要 -->
+    <div style="display:flex;gap:12px;margin-bottom:20px;">
+      <div class="kpi-card" style="flex:1;text-align:center;">
+        <div class="kpi-num green" id="maintNormal">0</div>
+        <div class="kpi-label">正常</div>
+      </div>
+      <div class="kpi-card" style="flex:1;text-align:center;">
+        <div class="kpi-num amber" id="maintDueSoon">0</div>
+        <div class="kpi-label">7天内到期</div>
+      </div>
+      <div class="kpi-card" style="flex:1;text-align:center;">
+        <div class="kpi-num red" id="maintOverdue">0</div>
+        <div class="kpi-label">已逾期</div>
+      </div>
+      <div class="kpi-card" style="flex:1;text-align:center;">
+        <div class="kpi-num blue" id="maintRecordCount">0</div>
+        <div class="kpi-label">维保记录</div>
+      </div>
+    </div>
+
+    <!-- 新建计划表单 -->
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">新建维保计划</div>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <div class="form-group">
+          <label>设备</label>
+          <select id="newPlanEquip">
+            <option value="">— 选择设备 —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>维保类型</label>
+          <select id="newPlanType">
+            <option value="routine">日常保养</option>
+            <option value="inspection">巡检</option>
+            <option value="repair">维修</option>
+            <option value="calibration">校准</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>维保周期（天）</label>
+          <input type="number" id="newPlanInterval" placeholder="自动根据设备类型">
+        </div>
+        <div class="form-group">
+          <label>下次维保日期</label>
+          <input type="date" id="newPlanNextDate">
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>备注</label>
+          <input type="text" id="newPlanRemark" placeholder="可选备注">
+        </div>
+      </div>
+      <button onclick="submitNewPlan()" class="btn btn-primary">创建计划</button>
+    </div>
+
+    <!-- 维保计划列表 -->
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;">
+      <div style="font-size:11px;color:var(--text-dim);padding:10px 14px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:0.5px;">维保计划列表</div>
+      <div style="overflow-x:auto;">
+        <table class="maint-plan-table" id="maintPlanTable">
+          <thead>
+            <tr>
+              <th>计划ID</th>
+              <th>设备</th>
+              <th>类型</th>
+              <th>周期(天)</th>
+              <th>上次维保</th>
+              <th>下次维保</th>
+              <th>状态</th>
+              <th>备注</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="maintPlanBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 维保记录列表 -->
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;margin-top:16px;">
+      <div style="font-size:11px;color:var(--text-dim);padding:10px 14px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:0.5px;">维保执行记录</div>
+      <div style="overflow-x:auto;">
+        <table class="maint-plan-table" id="maintRecordTable">
+          <thead>
+            <tr>
+              <th>记录ID</th>
+              <th>设备</th>
+              <th>类型</th>
+              <th>执行人</th>
+              <th>结果</th>
+              <th>费用(元)</th>
+              <th>执行时间</th>
+              <th>备注</th>
+            </tr>
+          </thead>
+          <tbody id="maintRecordBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 历史报表浮层 -->
+<div id="reportTab" style="display:none;position:fixed;inset:0;z-index:200;background:var(--bg-primary);overflow-y:auto;padding:20px;">
+  <div style="max-width:1400px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="font-size:18px;font-weight:600;color:var(--text-primary);">历史曲线查询</div>
+      <button onclick="showTab('main')" style="background:var(--border);color:var(--text-primary);border:1px solid var(--border-bright);padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;">返回总览</button>
+    </div>
+
+    <!-- 查询条件 -->
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12px;color:var(--text-secondary);">批次</label>
+        <select id="histBatch" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-size:12px;min-width:200px;">
+          <option value="">— 选择批次 —</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12px;color:var(--text-secondary);">开始时间</label>
+        <input type="datetime-local" id="histStart" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-size:12px;">
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12px;color:var(--text-secondary);">结束时间</label>
+        <input type="datetime-local" id="histEnd" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-size:12px;">
+      </div>
+      <button onclick="queryHistory()" style="background:var(--green);color:#000;border:none;padding:7px 20px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">查询</button>
+      <div id="histStatus" style="font-size:12px;color:var(--text-dim);margin-left:8px;"></div>
+    </div>
+
+    <!-- ECharts 容器 -->
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;height:520px;position:relative;">
+      <div id="histChart" style="width:100%;height:100%;"></div>
+    </div>
+
+    <!-- 数据统计摘要 -->
+    <div id="histSummary" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- 报工弹窗 -->
+<div id="reportModal" style="display:none;position:fixed;inset:0;z-index:300;background:#0006;backdrop-filter:blur(2px);align-items:center;justify-content:center;">
+  <div style="background:var(--bg-panel);border:1px solid var(--border-bright);border-radius:8px;padding:24px;width:420px;max-width:95vw;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <div style="font-size:15px;font-weight:600;color:var(--text-primary);">报工记录</div>
+      <button onclick="closeReportModal()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;">&times;</button>
+    </div>
+    <div style="display:grid;gap:12px;">
+      <div>
+        <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">工单 *</label>
+        <select id="repOrderId" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:13px;" onchange="onOrderChange()">
+          <option value="">— 选择工单 —</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">批次</label>
+        <select id="repBatchId" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:13px;">
+          <option value="">— 选择批次 —</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">报工工序</label>
+        <select id="repStage" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:13px;">
+          <option value="">自动</option>
+          <option value="sterilization">灭菌</option>
+          <option value="seed">种子培养</option>
+          <option value="fermentation">发酵</option>
+          <option value="centrifugation">离心</option>
+          <option value="drying">干燥</option>
+          <option value="packaging">包装</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">投入量 kg *</label>
+          <input id="repInput" type="number" step="0.1" min="0" placeholder="0.0" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:13px;">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">产出量 kg *</label>
+          <input id="repOutput" type="number" step="0.1" min="0" placeholder="0.0" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:13px;">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">得率</label>
+        <div id="repYieldCalc" style="font-size:20px;font-family:var(--font-mono);color:var(--green);padding:4px 0;">—</div>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">报工人员 *</label>
+        <input id="repWorker" type="text" placeholder="姓名" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:13px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">备注</label>
+        <input id="repRemark" type="text" placeholder="可选备注" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:13px;">
+      </div>
+    </div>
+    <div id="repError" style="color:var(--red);font-size:12px;margin-top:8px;display:none;"></div>
+    <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end;">
+      <button onclick="closeReportModal()" style="background:var(--border);color:var(--text-primary);border:1px solid var(--border);padding:8px 18px;border-radius:4px;cursor:pointer;font-size:13px;">取消</button>
+      <button onclick="submitWorkReport()" style="background:var(--green);color:#000;border:none;padding:8px 24px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">确认报工</button>
+    </div>
+  </div>
+</div>
+
+<!-- 历史报工管理弹窗 -->
+<div id="reportHistoryModal" style="display:none;position:fixed;inset:0;z-index:300;background:#0006;backdrop-filter:blur(2px);align-items:center;justify-content:center;">
+  <div style="background:var(--bg-panel);border:1px solid var(--border-bright);border-radius:8px;padding:24px;width:700px;max-width:95vw;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <div style="font-size:15px;font-weight:600;color:var(--text-primary);">报工记录管理</div>
+      <button onclick="closeReportHistory()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;">&times;</button>
+    </div>
+    <div id="reportHistoryList"></div>
+  </div>
+</div>
+
+<!-- 质量管理浮层 -->
+<div id="qualityOverlay" class="quality-overlay">
+  <div style="max-width:1400px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="font-size:18px;font-weight:600;color:var(--text-primary);">质量管理</div>
+      <button onclick="showTab('main')" style="background:var(--border);color:var(--text-primary);border:1px solid var(--border-bright);padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;">返回总览</button>
+    </div>
+
+    <div class="quality-tabs">
+      <button class="quality-tab-btn active" onclick="switchQualityTab('tests', this)">质量检验</button>
+      <button class="quality-tab-btn" onclick="switchQualityTab('specs', this)">质量标准</button>
+    </div>
+
+    <!-- 质量检验面板 -->
+    <div id="qualityTestsPanel" class="quality-panel active">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:13px;color:var(--text-secondary);">
+          <span id="qcTotalCount">0</span> 条检验记录
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="qcFilterResult" onchange="loadQualityTests()" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-size:12px;">
+            <option value="">全部判定</option>
+            <option value="pass">合格</option>
+            <option value="fail">不合格</option>
+            <option value="warning">告警</option>
+            <option value="pending">待判定</option>
+          </select>
+          <button onclick="openNewQCOffcanvas()" style="background:var(--green);color:#000;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">+ 新建检验</button>
+        </div>
+      </div>
+
+      <!-- 新建检验表单（Offcanvas风格） -->
+      <div id="qcNewForm" style="display:none;background:var(--bg-panel);border:1px solid var(--border-bright);border-radius:6px;padding:16px;margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">新建质量检验</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+          <div class="form-group">
+            <label>批次ID *</label>
+            <input type="text" id="qcFormBatch" placeholder="BAT-20260502-001">
+          </div>
+          <div class="form-group">
+            <label>检验阶段 *</label>
+            <select id="qcFormStage">
+              <option value="in_process">加工中</option>
+              <option value="final_product">成品</option>
+              <option value="incoming">来料</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>检验员 *</label>
+            <input type="text" id="qcFormTester" placeholder="张检验">
+          </div>
+          <div class="form-group">
+            <label>酶活 (U/g)</label>
+            <input type="number" id="qcFormEnzyme" placeholder="2300">
+          </div>
+          <div class="form-group">
+            <label>水分 (%)</label>
+            <input type="number" step="0.1" id="qcFormMoisture" placeholder="5.2">
+          </div>
+          <div class="form-group">
+            <label>微生物 (CFU/g)</label>
+            <input type="number" id="qcFormMicro" placeholder="300">
+          </div>
+          <div class="form-group">
+            <label>pH值</label>
+            <input type="number" step="0.01" id="qcFormPH" placeholder="6.5">
+          </div>
+          <div class="form-group">
+            <label>外观</label>
+            <input type="text" id="qcFormAppearance" placeholder="淡黄色粉末">
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label>备注</label>
+            <input type="text" id="qcFormRemark" placeholder="可选备注">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+          <button onclick="document.getElementById('qcNewForm').style.display='none'" style="background:var(--border);color:var(--text-primary);border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:12px;">取消</button>
+          <button onclick="submitNewQC()" style="background:var(--green);color:#000;border:none;padding:6px 20px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">提交检验</button>
+        </div>
+      </div>
+
+      <!-- 审核表单 -->
+      <div id="qcReviewForm" class="review-form">
+        <div class="form-group">
+          <label>审核人 *</label>
+          <input type="text" id="reviewerName" placeholder="王主管">
+        </div>
+        <div class="form-group">
+          <label>最终判定 *</label>
+          <select id="reviewResult">
+            <option value="pass">合格</option>
+            <option value="fail">不合格</option>
+            <option value="warning">告警</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>审核备注</label>
+          <input type="text" id="reviewRemark" placeholder="审核说明">
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="submitReview()" style="background:var(--green);color:#000;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">确认</button>
+          <button onclick="document.getElementById('qcReviewForm').classList.remove('active')" style="background:var(--border);color:var(--text-primary);border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px;">取消</button>
+        </div>
+      </div>
+
+      <!-- 检验记录表 -->
+      <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+        <table class="qc-table">
+          <thead>
+            <tr>
+              <th>检验ID</th>
+              <th>批次</th>
+              <th>阶段</th>
+              <th>酶活</th>
+              <th>水分</th>
+              <th>微生物</th>
+              <th>pH</th>
+              <th>外观</th>
+              <th>判定</th>
+              <th>判定详情</th>
+              <th>审核</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="qcTableBody">
+            <tr><td colspan="12" style="text-align:center;color:var(--text-dim);padding:24px;">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 质量标准面板 -->
+    <div id="qualitySpecsPanel" class="quality-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:13px;color:var(--text-secondary);">
+          <span id="specTotalCount">0</span> 条质量标准
+        </div>
+      </div>
+
+      <!-- 新增标准表单 -->
+      <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">新增质量标准</div>
+        <div class="spec-form">
+          <div class="form-group">
+            <label>产品类型 *</label>
+            <select id="specProductType">
+              <option value="all">所有产品</option>
+              <option value="ENZYME-001">中性蛋白酶</option>
+              <option value="ENZYME-002">糖化酶</option>
+              <option value="ENZYME-003">脂肪酶</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>阶段 *</label>
+            <select id="specStage">
+              <option value="in_process">加工中</option>
+              <option value="final_product">成品</option>
+              <option value="incoming">来料</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>参数名称 *</label>
+            <select id="specParamName">
+              <option value="enzyme_activity">酶活</option>
+              <option value="moisture">水分</option>
+              <option value="microbial_count">微生物</option>
+              <option value="pH_value">pH值</option>
+              <option value="appearance">外观</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>下限 (lo)</label>
+            <input type="number" step="0.01" id="specLo" placeholder="如 2000（不设则留空）">
+          </div>
+          <div class="form-group">
+            <label>上限 (hi)</label>
+            <input type="number" step="0.01" id="specHi" placeholder="如 8.0（不设则留空）">
+          </div>
+          <div class="form-group">
+            <label>单位</label>
+            <input type="text" id="specUnit" placeholder="U/g, %, CFU/g...">
+          </div>
+          <div class="form-group full-width" style="align-self:end;">
+            <button onclick="submitNewSpec()" style="background:var(--green);color:#000;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;width:100%;">添加标准</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 标准列表 -->
+      <div class="spec-grid" id="specGrid">
+        <div style="color:var(--text-dim);text-align:center;padding:24px;grid-column:1/-1;">加载中...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 交接班管理浮层 -->
+<div id="handoverTab" style="display:none;position:fixed;inset:0;z-index:200;background:var(--bg-primary);overflow-y:auto;padding:20px;">
+  <div style="max-width:1200px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="font-size:18px;font-weight:600;color:var(--text-primary);">交接班管理</div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button onclick="loadShiftTabData()" style="background:var(--border);color:var(--text-primary);border:1px solid var(--border-bright);padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;">刷新</button>
+        <button onclick="showTab('main')" style="background:var(--border);color:var(--text-primary);border:1px solid var(--border-bright);padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;">返回总览</button>
+      </div>
+    </div>
+
+    <!-- 当前班次状态卡 -->
+    <div id="currentShiftCard" style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:20px;margin-bottom:16px;">
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">当前班次</div>
+      <div id="currentShiftContent" style="color:var(--text-dim);font-size:13px;">加载中...</div>
+    </div>
+
+    <!-- 班次卡片组 + 交接操作 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+
+      <!-- 左侧：今日班次列表 -->
+      <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:16px;">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">今日班次</div>
+        <div id="todayShiftList" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
+      <!-- 右侧：交接操作 -->
+      <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:16px;">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">交接班操作</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:12px;">
+            <div style="font-size:12px;color:var(--text-primary);margin-bottom:4px;">班前交接</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">接班人到岗后，检查上一班次生产状态，确认设备与物料情况</div>
+            <button onclick="openHandoverModal('pre_shift')" style="background:var(--blue);color:#fff;border:none;padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:600;">班前交接</button>
+          </div>
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:12px;">
+            <div style="font-size:12px;color:var(--text-primary);margin-bottom:4px;">交班</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">本班次结束，向接班人交接生产情况与遗留问题</div>
+            <button onclick="openHandoverModal('shift_end')" style="background:var(--amber);color:#000;border:none;padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:600;">交班</button>
+          </div>
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:12px;">
+            <div style="font-size:12px;color:var(--text-primary);margin-bottom:4px;">班后交接</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">特殊情况下班后补充交接，记录异常与处理措施</div>
+            <button onclick="openHandoverModal('post_shift')" style="background:var(--purple);color:#fff;border:none;padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:600;">班后交接</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 最近交接记录 -->
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;">
+      <div style="font-size:11px;color:var(--text-dim);padding:10px 14px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:0.5px;">最近交接记录</div>
+      <div id="handoverHistoryList" style="padding:12px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 交接班弹窗 -->
+<div id="handoverModal" style="display:none;position:fixed;inset:0;z-index:300;background:#0006;backdrop-filter:blur(2px);align-items:center;justify-content:center;">
+  <div style="background:var(--bg-panel);border:1px solid var(--border-bright);border-radius:8px;padding:24px;width:500px;max-width:95vw;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <div style="font-size:15px;font-weight:600;color:var(--text-primary);" id="handoverModalTitle">交接班</div>
+      <button onclick="closeHandoverModal()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;">&times;</button>
+    </div>
+    <div style="display:grid;gap:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group">
+          <label>交班班次 *</label>
+          <select id="handoverShiftOut" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:12px;">
+            <option value="">— 选择班次 —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>接班班次</label>
+          <select id="handoverShiftIn" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:12px;">
+            <option value="">— 选择班次 —</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>交接类型 *</label>
+        <select id="handoverType" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:12px;">
+          <option value="pre_shift">班前交接</option>
+          <option value="mid_shift">班中交接</option>
+          <option value="shift_end">交班</option>
+          <option value="post_shift">班后交接</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>交接内容摘要 *</label>
+        <textarea id="handoverContent" rows="4" placeholder="请填写本班次生产情况、设备状态、关键参数等..." style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:12px;font-family:var(--font-ui);resize:vertical;"></textarea>
+      </div>
+      <div class="form-group">
+        <label>遗留问题（JSON格式）</label>
+        <textarea id="handoverIssues" rows="2" placeholder='[{"type":"设备","desc":"FER-01温度偏高","priority":"high"}]' style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:12px;font-family:var(--font-ui);resize:vertical;"></textarea>
+      </div>
+      <div class="form-group">
+        <label>交班人 *</label>
+        <input id="handoverCreator" type="text" placeholder="交班人姓名" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:13px;">
+      </div>
+    </div>
+    <div id="handoverError" style="color:var(--red);font-size:12px;margin-top:8px;display:none;"></div>
+    <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end;">
+      <button onclick="closeHandoverModal()" style="background:var(--border);color:var(--text-primary);border:1px solid var(--border);padding:8px 18px;border-radius:4px;cursor:pointer;font-size:13px;">取消</button>
+      <button onclick="submitHandover()" style="background:var(--green);color:#000;border:none;padding:8px 24px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">确认交接</button>
+    </div>
+  </div>
+</div>
+
+<!-- 交接确认弹窗 -->
+<div id="handoverConfirmModal" style="display:none;position:fixed;inset:0;z-index:300;background:#0006;backdrop-filter:blur(2px);align-items:center;justify-content:center;">
+  <div style="background:var(--bg-panel);border:1px solid var(--border-bright);border-radius:8px;padding:24px;width:420px;max-width:95vw;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <div style="font-size:15px;font-weight:600;color:var(--text-primary);">接班人确认</div>
+      <button onclick="closeHandoverConfirm()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;">&times;</button>
+    </div>
+    <div style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;" id="handoverConfirmInfo">接班人请确认交接内容</div>
+    <div id="handoverConfirmContent" style="background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:14px;font-size:12px;max-height:200px;overflow-y:auto;"></div>
+    <div class="form-group">
+      <label>接班人姓名 *</label>
+      <input id="handoverConfirmer" type="text" placeholder="请输入接班人姓名" style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:13px;">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end;">
+      <button onclick="closeHandoverConfirm()" style="background:var(--border);color:var(--text-primary);border:1px solid var(--border);padding:8px 18px;border-radius:4px;cursor:pointer;font-size:13px;">取消</button>
+      <button onclick="submitHandoverConfirm()" style="background:var(--green);color:#000;border:none;padding:8px 24px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;">确认接班</button>
+    </div>
+  </div>
+</div>
+
+<script src="http://localhost:5003/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script>
+/* ══════════════════════════════════════════════════════
+   Socket.IO 实时数据 + Canvas 实时曲线
+   ══════════════════════════════════════════════════════ */
+
+const API = 'http://localhost:5002/api';
+
+// ─── 时钟 ───
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toLocaleTimeString('zh-CN', { hour12: false });
+  document.getElementById('today').textContent = n.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ─── 数据缓存 ───
+let orders = [];
+let batches = {};
+let equipment = [];
+let qualityTests = [];
+let alertStats = { critical: 0, warning: 0, info: 0, resolved: 0 };
+let alertHistory = [];
+let workReports = [];
+
+// ─── Canvas 曲线 ───
+const canvas = document.getElementById('stripChart');
+const ctx = canvas.getContext('2d');
+const MAX_POINTS = 120;  // 2分钟历史（2秒/点）
+const chartData = { temp: [], ph: [], do: [], labels: [] };
+
+function resizeCanvas() {
+  const c = document.getElementById('chartContainer');
+  canvas.width = c.clientWidth * window.devicePixelRatio;
+  canvas.height = c.clientHeight * window.devicePixelRatio;
+  canvas.style.width = c.clientWidth + 'px';
+  canvas.style.height = c.clientHeight + 'px';
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function drawChart() {
+  const W = canvas.width / window.devicePixelRatio;
+  const H = canvas.height / window.devicePixelRatio;
+  ctx.clearRect(0, 0, W, H);
+
+  if (chartData.temp.length < 2) return;
+
+  // 背景网格
+  ctx.strokeStyle = '#1f2d42';
+  ctx.lineWidth = 0.5;
+  for (let y = 0; y <= 4; y++) {
+    const yPos = (H / 4) * y;
+    ctx.beginPath();
+    ctx.moveTo(0, yPos);
+    ctx.lineTo(W, yPos);
+    ctx.stroke();
+  }
+
+  // Y轴范围
+  const tempRange = [30, 42];
+  const phRange = [4.5, 8.0];
+  const doRange = [0, 100];
+
+  function mapVal(val, range) {
+    return H - ((val - range[0]) / (range[1] - range[0])) * H;
+  }
+
+  function drawLine(data, color, range) {
+    if (data.length < 2) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = (i / MAX_POINTS) * W;
+      const y = mapVal(v, range);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // 最新值标注
+    const lastX = ((data.length - 1) / MAX_POINTS) * W;
+    const lastY = mapVal(data[data.length - 1], range);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawLine(chartData.temp, '#ff4757', tempRange);
+  drawLine(chartData.ph, '#3b9eff', phRange);
+  drawLine(chartData.do, '#00d4aa', doRange);
+
+  // Y轴标签
+  ctx.fillStyle = '#4a5d7a';
+  ctx.font = '10px JetBrains Mono, Consolas, monospace';
+  ctx.fillText('42°', 4, 12);
+  ctx.fillText('30°', 4, H - 4);
+  ctx.fillText('8.0', 4, 12 + (H / 4) * 1 - 4);
+  ctx.fillText('4.5', 4, 12 + (H / 4) * 3 - 4);
+  ctx.fillText('100%', 4, 12 + 4);
+  ctx.fillText('0%', 4, H - 4);
+}
+
+function pushDataPoint(temp, ph, do_) {
+  chartData.temp.push(temp);
+  chartData.ph.push(ph);
+  chartData.do.push(do_);
+  chartData.labels.push(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
+  if (chartData.temp.length > MAX_POINTS) {
+    chartData.temp.shift();
+    chartData.ph.shift();
+    chartData.do.shift();
+  }
+  drawChart();
+}
+
+// ─── Socket.IO 连接 ───
+let socket = null;
+
+function connectWS() {
+  socket = io('http://localhost:5002/mes', {
+    transports: ['polling', 'websocket'],
+    reconnection: true,
+    reconnectionDelay: 3000,
+  });
+
+  socket.on('connect', () => {
+    document.getElementById('wsDot').className = 'conn-dot connected';
+    document.getElementById('wsStatus').textContent = '已连接';
+    document.getElementById('systemDot').className = 'status-dot';
+    document.getElementById('systemStatus').textContent = '系统正常';
+  });
+
+  socket.on('connected', (data) => {
+    // 服务器确认连接，订阅所有活跃批次
+    fetch(API + '/dashboard/summary')
+      .then(r => r.json())
+      .then(d => {
+        if (d.data && d.data.running_batches > 0) {
+          // 订阅已有批次
+        }
+      });
+  });
+
+  socket.on('batch_params', (msg) => {
+    handleSocketMessage(msg);
+  });
+
+  socket.on('disconnect', () => {
+    document.getElementById('wsDot').className = 'conn-dot disconnected';
+    document.getElementById('wsStatus').textContent = '断开';
+    document.getElementById('systemDot').className = 'status-dot amber';
+    document.getElementById('systemStatus').textContent = '重连中...';
+  });
+
+  socket.on('connect_error', () => {
+    document.getElementById('wsDot').className = 'conn-dot disconnected';
+    document.getElementById('wsStatus').textContent = '连接错误';
+  });
+}
+
+function handleSocketMessage(msg) {
+  // 实时参数推送
+  if (msg.batch_id && msg.params) {
+    const { batch_id, params, alerts, timestamp } = msg;
+
+    // 更新曲线
+    pushDataPoint(params.temp, params.pH, params.DO);
+
+    // 更新发酵罐卡片
+    updateTankCard(batch_id, params, alerts);
+
+    // 处理告警
+    if (alerts && alerts.length > 0) {
+      alerts.forEach(a => {
+        addAlert({ ...a, batch_id, timestamp });
+      });
+    }
+  }
+
+  // 告警事件
+  if (msg.alert_type && msg.batch_id) {
+    addAlert(msg);
+  }
+}
+
+function addAlert(a) {
+  const level = a.level || 'info';
+  alertStats[level]++;
+  alertHistory.unshift(a);
+  if (alertHistory.length > 50) alertHistory.pop();
+  renderAlertLog();
+  renderAlertStats();
+}
+
+function renderAlertLog() {
+  const el = document.getElementById('alertLog');
+  const count = alertStats.critical + alertStats.warning + alertStats.info;
+  document.getElementById('alertCount').textContent = `${count} 条`;
+  if (alertHistory.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:16px">暂无告警</div>';
+    return;
+  }
+  el.innerHTML = alertHistory.slice(0, 20).map(a => {
+    const level = a.level || 'info';
+    const label = level === 'critical' ? '严重' : level === 'warning' ? '警告' : '提示';
+    const time = new Date(a.timestamp || Date.now()).toLocaleTimeString('zh-CN', { hour12: false });
+    return `<div class="alert-item">
+      <div class="alert-time">${time}</div>
+      <div class="alert-batch">${a.batch_id || ''}</div>
+      <div class="alert-message">
+        <span class="alert-level-${level}">[${label}]</span>
+        ${a.message || a.alert_type}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAlertStats() {
+  document.getElementById('alertCritical').textContent = alertStats.critical;
+  document.getElementById('alertWarning').textContent = alertStats.warning;
+  document.getElementById('alertInfo').textContent = alertStats.info;
+  document.getElementById('alertResolved').textContent = alertStats.resolved;
+}
+
+// ─── 渲染 ───
+function renderTankCards() {
+  const container = document.getElementById('tankContainer');
+  const activeBatches = Object.values(batches).filter(b => b.stage !== 'completed' && b.stage !== 'pending');
+
+  if (activeBatches.length === 0) {
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px">当前无进行中批次</div>';
+    return;
+  }
+
+  container.innerHTML = activeBatches.map(b => {
+    const params = b.current || {};
+    const alerts = b.alerts || [];
+    const cardClass = alerts.some(a => a.level === 'critical') ? 'alert'
+                    : alerts.length > 0 ? 'warning'
+                    : 'active';
+    const stageLabels = {
+      pending: '等待', sterilization: '灭菌', seed: '种子培养',
+      fermentation: '发酵中', centrifugation: '离心', drying: '干燥', packaging: '包装', completed: '完成'
+    };
+    const progress = { pending: 0, sterilization: 15, seed: 30, fermentation: 50, centrifugation: 70, drying: 85, packaging: 95, completed: 100 };
+    const p = progress[b.stage] || 0;
+
+    return `<div class="tank-card ${cardClass}" id="tank-${b.batch_id}">
+      <div class="tank-id">${b.batch_id}</div>
+      <div class="tank-name">${b.product_name || b.order_id || b.batch_id}</div>
+      <div class="tank-stage">${stageLabels[b.stage] || b.stage}</div>
+      <div class="tank-params">
+        <div class="tank-param">
+          <div class="tank-param-label">温度 °C</div>
+          <div class="tank-param-value temp" id="tank-${b.batch_id}-temp">${params.temp?.toFixed(1) ?? '-'}</div>
+        </div>
+        <div class="tank-param">
+          <div class="tank-param-label">pH</div>
+          <div class="tank-param-value ph" id="tank-${b.batch_id}-ph">${params.pH?.toFixed(2) ?? '-'}</div>
+        </div>
+        <div class="tank-param">
+          <div class="tank-param-label">DO %</div>
+          <div class="tank-param-value do" id="tank-${b.batch_id}-do">${params.DO?.toFixed(1) ?? '-'}</div>
+        </div>
+        <div class="tank-param">
+          <div class="tank-param-label">转速 rpm</div>
+          <div class="tank-param-value stir" id="tank-${b.batch_id}-stir">${params.stir_speed?.toFixed(0) ?? '-'}</div>
+        </div>
+      </div>
+      <div class="tank-progress">
+        <div class="tank-progress-fill" style="width:${p}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateTankCard(batch_id, params, alerts = []) {
+  const card = document.getElementById(`tank-${batch_id}`);
+  if (!card) return;
+
+  const updateVal = (id, val, decimals) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const newVal = val?.toFixed(decimals) ?? '-';
+    if (el.textContent !== newVal) {
+      el.textContent = newVal;
+      el.classList.add('num-flash');
+      setTimeout(() => el.classList.remove('num-flash'), 400);
+    }
+  };
+
+  updateVal(`tank-${batch_id}-temp`, params.temp, 1);
+  updateVal(`tank-${batch_id}-ph`, params.pH, 2);
+  updateVal(`tank-${batch_id}-do`, params.DO, 1);
+  updateVal(`tank-${batch_id}-stir`, params.stir_speed, 0);
+
+  // 卡片状态
+  const hasCritical = alerts.some(a => a.level === 'critical');
+  const hasWarn = alerts.some(a => a.level === 'warning');
+  card.className = `tank-card ${hasCritical ? 'alert' : hasWarn ? 'warning' : 'active'}`;
+}
+
+function renderEquipment() {
+  const el = document.getElementById('equipList');
+  document.getElementById('equipCount').textContent = `${equipment.length} 台`;
+  el.innerHTML = equipment.map(e => `
+    <div class="equip-row">
+      <div>
+        <div class="equip-row-name">${e.equip_name}</div>
+        <div class="equip-row-type">${e.equip_type}</div>
+      </div>
+      <span class="equip-status ${e.status}">${e.status === 'running' ? '运行' : e.status === 'idle' ? '空闲' : e.status === 'fault' ? '故障' : '维保'}</span>
+    </div>
+  `).join('');
+}
+
+function renderOrders() {
+  const el = document.getElementById('orderList');
+  document.getElementById('orderCount').textContent = `${orders.length} 单`;
+  el.innerHTML = orders.slice(0, 8).map(o => {
+    const badgeClass = o.status === 'completed' ? 'completed' : o.status === 'in_progress' ? 'in_progress' : 'pending';
+    const badgeText = o.status === 'completed' ? '已完成' : o.status === 'in_progress' ? '进行中' : '待生产';
+    return `<div class="order-item">
+      <div>
+        <div class="order-name">${o.product_name}</div>
+        <div class="order-meta">${o.batch_size}kg · ${o.fermenter_id || '未分配'}</div>
+      </div>
+      <span class="order-badge ${badgeClass}">${badgeText}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderQualityTests() {
+  const el = document.getElementById('qcList');
+  document.getElementById('qcCount').textContent = `${qualityTests.length} 条`;
+  if (qualityTests.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:12px">暂无记录</div>';
+    return;
+  }
+  el.innerHTML = qualityTests.slice(0, 6).map(t => {
+    const resultClass = t.result || 'pending';
+    const resultText = t.result === 'pass' ? '合格' : t.result === 'fail' ? '不合格' : '待判定';
+    return `<div class="qc-item">
+      <div>
+        <div class="qc-batch">${t.batch_id}</div>
+        <div style="font-size:10px;color:var(--text-dim)">${t.tester || ''} · ${t.test_time ? new Date(t.test_time).toLocaleDateString('zh-CN') : ''}</div>
+      </div>
+      <span class="qc-result ${resultClass}">${resultText}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderKPIs(summary) {
+  document.getElementById('kpi-total').textContent = summary.total_orders ?? '-';
+  document.getElementById('kpi-running').textContent = summary.running_batches ?? '-';
+  document.getElementById('kpi-completed').textContent = summary.completed ?? '-';
+  document.getElementById('kpi-yield').textContent = summary.yield_rate ? summary.yield_rate.toFixed(1) + '%' : '-';
+}
+
+// ─── 加载 REST 数据 ───
+async function loadAll() {
+  await Promise.all([loadSummary(), loadOrders(), loadEquipment(), loadBatches(), loadQuality(), loadAlerts(), loadReports()]);
+  updateCurrentReportInfo();
+}
+
+async function loadJSON(url) {
+  try {
+    const r = await fetch(API + url);
+    const j = await r.json();
+    return j.code === 0 ? j.data : null;
+  } catch { return null; }
+}
+
+async function loadSummary() {
+  const d = await loadJSON('/dashboard/summary');
+  if (d) renderKPIs(d);
+}
+
+async function loadOrders() {
+  orders = await loadJSON('/orders') || [];
+  renderOrders();
+}
+
+async function loadEquipment() {
+  equipment = await loadJSON('/equipment') || [];
+  renderEquipment();
+}
+
+async function loadBatches() {
+  const list = await loadJSON('/batches') || [];
+  list.forEach(b => { batches[b.batch_id] = b; });
+  renderTankCards();
+  // 订阅所有活跃批次
+  if (socket && socket.connected) {
+    list.filter(b => b.stage !== 'completed' && b.stage !== 'pending').forEach(b => {
+      socket.emit('subscribe_batch', { batch_id: b.batch_id });
+    });
+  }
+}
+
+async function loadQuality() {
+  qualityTests = await loadJSON('/quality/tests') || [];
+  renderQualityTests();
+}
+
+async function loadAlerts() {
+  const active = await loadJSON('/alerts?status=active') || [];
+  alertStats.critical = active.filter(a => a.level === 'critical').length;
+  alertStats.warning = active.filter(a => a.level === 'warning').length;
+  alertStats.info = active.filter(a => a.level === 'info').length;
+  alertHistory = active.slice(0, 20);
+  renderAlertLog();
+  renderAlertStats();
+}
+
+async function loadReports() {
+  workReports = await loadJSON('/work/reports') || [];
+  renderReportList();
+}
+
+function renderReportList() {
+  const el = document.getElementById('reportList');
+  if (workReports.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:12px">暂无报工记录</div>';
+    return;
+  }
+  el.innerHTML = workReports.slice(0, 8).map(r => {
+    const statusColors = { recorded: 'blue', confirmed: 'green', cancelled: 'red' };
+    const statusText = { recorded: '已记录', confirmed: '已确认', cancelled: '已取消' };
+    const sc = statusColors[r.status] || 'blue';
+    const stageLabels = {
+      sterilization: '灭菌', seed: '种子培养', fermentation: '发酵',
+      centrifugation: '离心', drying: '干燥', packaging: '包装'
+    };
+    return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);">${r.order_id}</span>
+        <span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--${sc}-dim,var(--border));color:var(--${sc},var(--text-dim));">${statusText[r.status] || '已记录'}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:3px;">
+        ${stageLabels[r.stage] || r.stage || ''} · ${r.worker || ''}
+      </div>
+      <div style="display:flex;gap:12px;font-family:var(--font-mono);font-size:12px;">
+        <span style="color:var(--amber)">投:${r.input_amount != null ? r.input_amount+'kg' : '-'}</span>
+        <span style="color:var(--green)">产:${r.output_amount != null ? r.output_amount+'kg' : '-'}</span>
+        <span style="color:var(--${r.yield_rate >= 90 ? 'green' : r.yield_rate >= 70 ? 'amber' : 'red'})">率:${r.yield_rate != null ? r.yield_rate+'%' : '-'}</span>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:3px;">${r.report_time ? new Date(r.report_time).toLocaleDateString('zh-CN') : ''} ${r.remark || ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateCurrentReportInfo() {
+  // 找进行中的工单和批次
+  const inProgressOrder = orders.find(o => o.status === 'in_progress');
+  const activeBatch = Object.values(batches).find(b => b.stage !== 'completed' && b.stage !== 'pending');
+  if (inProgressOrder) {
+    const badgeClass = inProgressOrder.status === 'completed' ? 'completed' : inProgressOrder.status === 'in_progress' ? 'in_progress' : 'pending';
+    const badgeText = inProgressOrder.status === 'completed' ? '已完成' : inProgressOrder.status === 'in_progress' ? '进行中' : '待生产';
+    document.getElementById('curOrderBadge').className = `order-badge ${badgeClass}`;
+    document.getElementById('curOrderBadge').textContent = `${inProgressOrder.product_name} ${badgeText}`;
+    document.getElementById('curTarget').textContent = `目标 ${inProgressOrder.batch_size}kg`;
+  }
+  if (activeBatch) {
+    const stageLabels = {
+      pending: '等待', sterilization: '灭菌', seed: '种子培养',
+      fermentation: '发酵中', centrifugation: '离心', drying: '干燥', packaging: '包装', completed: '完成'
+    };
+    document.getElementById('curBatchBadge').textContent = stageLabels[activeBatch.stage] || activeBatch.stage;
+    document.getElementById('curBatchBadge').style.display = 'inline-block';
+  }
+}
+
+function openReportModal() {
+  document.getElementById('reportModal').style.display = 'flex';
+  document.getElementById('repError').style.display = 'none';
+  // 填充工单下拉
+  const sel = document.getElementById('repOrderId');
+  sel.innerHTML = '<option value="">— 选择工单 —</option>';
+  orders.forEach(o => {
+    sel.innerHTML += `<option value="${o.order_id}">${o.order_id} ${o.product_name} (${o.batch_size}kg)</option>`;
+  });
+  // 填充批次下拉
+  const batchSel = document.getElementById('repBatchId');
+  batchSel.innerHTML = '<option value="">— 选择批次 —</option>';
+  Object.values(batches).forEach(b => {
+    if (b.stage !== 'completed') {
+      batchSel.innerHTML += `<option value="${b.batch_id}">${b.batch_id} ${b.stage}</option>`;
+    }
+  });
+  // 清空
+  document.getElementById('repInput').value = '';
+  document.getElementById('repOutput').value = '';
+  document.getElementById('repYieldCalc').textContent = '—';
+  document.getElementById('repWorker').value = '';
+  document.getElementById('repRemark').value = '';
+  document.getElementById('repStage').value = '';
+  // 选当前进行中工单/批次
+  const inProg = orders.find(o => o.status === 'in_progress');
+  if (inProg) sel.value = inProg.order_id;
+  const activeBatch = Object.values(batches).find(b => b.stage !== 'completed' && b.stage !== 'pending');
+  if (activeBatch) batchSel.value = activeBatch.batch_id;
+}
+
+function closeReportModal() {
+  document.getElementById('reportModal').style.display = 'none';
+}
+
+function closeReportHistory() {
+  document.getElementById('reportHistoryModal').style.display = 'none';
+}
+
+function onOrderChange() {
+  const oid = document.getElementById('repOrderId').value;
+  // 自动补全批次
+  const batchSel = document.getElementById('repBatchId');
+  batchSel.innerHTML = '<option value="">— 选择批次 —</option>';
+  Object.values(batches).filter(b => b.order_id === oid).forEach(b => {
+    batchSel.innerHTML += `<option value="${b.batch_id}">${b.batch_id} ${b.stage}</option>`;
+  });
+}
+
+// 得率实时计算
+document.getElementById('repInput')?.addEventListener('input', calcYield);
+document.getElementById('repOutput')?.addEventListener('input', calcYield);
+function calcYield() {
+  const inp = parseFloat(document.getElementById('repInput').value);
+  const out = parseFloat(document.getElementById('repOutput').value);
+  const el = document.getElementById('repYieldCalc');
+  if (inp && out && inp > 0) {
+    const y = (out / inp * 100).toFixed(2);
+    el.textContent = y + '%';
+    el.style.color = y >= 90 ? 'var(--green)' : y >= 70 ? 'var(--amber)' : 'var(--red)';
+  } else {
+    el.textContent = '—';
+    el.style.color = 'var(--green)';
+  }
+}
+
+async function submitWorkReport() {
+  const order_id = document.getElementById('repOrderId').value;
+  const worker = document.getElementById('repWorker').value.trim();
+  const input_amount = parseFloat(document.getElementById('repInput').value);
+  const output_amount = parseFloat(document.getElementById('repOutput').value);
+  const errorEl = document.getElementById('repError');
+  if (!order_id) { errorEl.textContent = '请选择工单'; errorEl.style.display = 'block'; return; }
+  if (!worker) { errorEl.textContent = '请填写报工人员'; errorEl.style.display = 'block'; return; }
+  if (!input_amount || input_amount <= 0) { errorEl.textContent = '请填写正确的投入量'; errorEl.style.display = 'block'; return; }
+  if (!output_amount || output_amount <= 0) { errorEl.textContent = '请填写正确的产出量'; errorEl.style.display = 'block'; return; }
+  errorEl.style.display = 'none';
+  const payload = {
+    order_id,
+    batch_id: document.getElementById('repBatchId').value || null,
+    worker,
+    stage: document.getElementById('repStage').value || null,
+    input_amount,
+    output_amount,
+    remark: document.getElementById('repRemark').value.trim() || null
+  };
+  try {
+    const r = await fetch(API + '/work/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if (j.code === 0) {
+      closeReportModal();
+      await loadReports();
+      updateCurrentReportInfo();
+    } else {
+      errorEl.textContent = j.message || '提交失败';
+      errorEl.style.display = 'block';
+    }
+  } catch (e) {
+    errorEl.textContent = '网络错误: ' + e.message;
+    errorEl.style.display = 'block';
+  }
+}
+
+// ─── 设备台账 & 维保 ───
+let maintenancePlans = [];
+let maintenanceRecords = [];
+
+async function loadEquipmentTab() {
+  await Promise.all([loadMaintPlans(), loadMaintRecords()]);
+  renderEquipDetailList();
+  renderMaintSummary();
+  renderMaintPlanTable();
+  renderMaintRecordTable();
+  populateEquipSelect();
+}
+
+async function loadMaintPlans() {
+  maintenancePlans = await loadJSON('/maintenance/plans') || [];
+}
+
+async function loadMaintRecords() {
+  maintenanceRecords = await loadJSON('/maintenance/records') || [];
+}
+
+function renderEquipDetailList() {
+  const el = document.getElementById('equipDetailList');
+  if (!equipment.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;">暂无设备数据</div>';
+    return;
+  }
+  el.innerHTML = equipment.map(e => {
+    const plan = maintenancePlans.find(p => p.equip_id === e.equip_id && p.status !== 'inactive');
+    const today = new Date().toISOString().slice(0, 10);
+    const statusClass = !plan ? 'inactive'
+      : plan.status === 'overdue' ? 'overdue'
+      : (plan.next_date && daysBetween(today, plan.next_date) <= 7) ? 'due-soon'
+      : 'active';
+    const statusText = !plan ? '无计划'
+      : plan.status === 'overdue' ? '已逾期'
+      : (plan.next_date && daysBetween(today, plan.next_date) <= 7) ? '即将到期'
+      : '正常';
+    const typeLabels = { routine: '日常', inspection: '巡检', repair: '维修', calibration: '校准' };
+    return `<div class="equip-card" onclick="selectEquip('${e.equip_id}')">
+      <div class="equip-card-name">${e.equip_name}</div>
+      <div class="equip-card-meta">${e.equip_id} · ${e.equip_type} · ${e.model || '-'}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span class="maint-status ${statusClass}">${statusText}</span>
+        ${plan ? `<span style="font-size:10px;color:var(--text-dim)">下次 ${plan.next_date || '-'}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMaintSummary() {
+  const today = new Date().toISOString().slice(0, 10);
+  const normal = maintenancePlans.filter(p => {
+    if (!p.next_date) return false;
+    const days = daysBetween(today, p.next_date);
+    return p.status === 'active' && days > 7;
+  }).length;
+  const dueSoon = maintenancePlans.filter(p => {
+    if (!p.next_date) return false;
+    const days = daysBetween(today, p.next_date);
+    return p.status === 'active' && days >= 0 && days <= 7;
+  }).length;
+  const overdue = maintenancePlans.filter(p => p.status === 'overdue' || (p.next_date && p.next_date < today)).length;
+  document.getElementById('maintNormal').textContent = normal;
+  document.getElementById('maintDueSoon').textContent = dueSoon;
+  document.getElementById('maintOverdue').textContent = overdue;
+  document.getElementById('maintRecordCount').textContent = maintenanceRecords.length;
+}
+
+function renderMaintPlanTable() {
+  const today = new Date().toISOString().slice(0, 10);
+  const tbody = document.getElementById('maintPlanBody');
+  if (!maintenancePlans.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:20px;">暂无维保计划</td></tr>';
+    return;
+  }
+  const typeLabels = { routine: '日常保养', inspection: '巡检', repair: '维修', calibration: '校准' };
+  tbody.innerHTML = maintenancePlans.map(p => {
+    const days = p.next_date ? daysBetween(today, p.next_date) : null;
+    const rowClass = p.status === 'overdue' || (days !== null && days < 0) ? 'overdue'
+      : (days !== null && days >= 0 && days <= 7) ? 'due-soon' : '';
+    const statusLabel = p.status === 'overdue' || (days !== null && days < 0) ? 'overdue'
+      : (days !== null && days >= 0 && days <= 7) ? 'due-soon'
+      : p.status === 'active' ? 'active' : 'inactive';
+    const statusText = { active: '正常', overdue: '已逾期', 'due-soon': '即将到期', inactive: '未启用' };
+    return `<tr class="${rowClass}">
+      <td><span style="font-family:var(--font-mono);font-size:11px">${p.plan_id}</span></td>
+      <td>${p.equip_name}</td>
+      <td>${typeLabels[p.maintenance_type] || p.maintenance_type}</td>
+      <td>${p.interval_days}</td>
+      <td>${p.last_date || '-'}</td>
+      <td>${p.next_date || '-'}</td>
+      <td><span class="maint-status ${statusLabel}">${statusText[statusLabel]}</span></td>
+      <td>${p.remark || ''}</td>
+      <td>
+        <button onclick="executePlan('${p.plan_id}')" style="background:var(--green);color:#000;border:none;padding:3px 10px;border-radius:3px;font-size:11px;cursor:pointer;">执行</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderMaintRecordTable() {
+  const tbody = document.getElementById('maintRecordBody');
+  if (!maintenanceRecords.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:20px;">暂无维保记录</td></tr>';
+    return;
+  }
+  const typeLabels = { routine: '日常保养', inspection: '巡检', repair: '维修', calibration: '校准' };
+  const resultLabels = { ok: '合格', issues: '有问题', failed: '失败' };
+  tbody.innerHTML = maintenanceRecords.map(r => `
+    <tr>
+      <td><span style="font-family:var(--font-mono);font-size:11px">#${r.record_id}</span></td>
+      <td>${r.equip_name}</td>
+      <td>${typeLabels[r.maintenance_type] || r.maintenance_type}</td>
+      <td>${r.executor || '-'}</td>
+      <td>${resultLabels[r.result] || r.result || '-'}</td>
+      <td>${r.cost != null ? r.cost : '-'}</td>
+      <td>${r.record_time ? new Date(r.record_time).toLocaleString('zh-CN') : '-'}</td>
+      <td>${r.remark || ''}</td>
+    </tr>`).join('');
+}
+
+function populateEquipSelect() {
+  const sel = document.getElementById('newPlanEquip');
+  sel.innerHTML = '<option value="">— 选择设备 —</option>' +
+    equipment.map(e => `<option value="${e.equip_id}">${e.equip_name} (${e.equip_id})</option>`).join('');
+}
+
+async function submitNewPlan() {
+  const equip_id = document.getElementById('newPlanEquip').value;
+  const maintenance_type = document.getElementById('newPlanType').value;
+  const interval_days = document.getElementById('newPlanInterval').value;
+  const next_date = document.getElementById('newPlanNextDate').value;
+  const remark = document.getElementById('newPlanRemark').value;
+  if (!equip_id) { alert('请选择设备'); return; }
+
+  const body = { equip_id, maintenance_type };
+  if (interval_days) body.interval_days = parseInt(interval_days);
+  if (next_date) body.next_date = next_date;
+  if (remark) body.remark = remark;
+
+  const r = await fetch(API + '/maintenance/plans', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const j = await r.json();
+  if (j.code === 0) {
+    await loadEquipmentTab();
+    // 清空表单
+    document.getElementById('newPlanEquip').value = '';
+    document.getElementById('newPlanInterval').value = '';
+    document.getElementById('newPlanNextDate').value = '';
+    document.getElementById('newPlanRemark').value = '';
+  } else {
+    alert('创建失败: ' + j.message);
+  }
+}
+
+async function executePlan(plan_id) {
+  const plan = maintenancePlans.find(p => p.plan_id === plan_id);
+  if (!plan) return;
+  const executor = prompt('请输入执行人姓名:');
+  if (!executor) return;
+  const result = prompt('保养结果 (ok/issues/failed):', 'ok');
+  if (!result) return;
+  const cost = prompt('费用（元）:', '0');
+  const remark = prompt('备注（可选）:', '');
+
+  const r = await fetch(API + '/maintenance/records', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      plan_id, equip_id: plan.equip_id, maintenance_type: plan.maintenance_type,
+      executor, result, cost: cost ? parseFloat(cost) : 0, remark
+    })
+  });
+  const j = await r.json();
+  if (j.code === 0) {
+    await loadEquipmentTab();
+  } else {
+    alert('执行失败: ' + j.message);
+  }
+}
+
+async function generateMaintPlans() {
+  const r = await fetch(API + '/maintenance/generate-plans', { method: 'POST' });
+  const j = await r.json();
+  if (j.code === 0) {
+    await loadEquipmentTab();
+    alert(j.message);
+  } else {
+    alert('生成失败: ' + j.message);
+  }
+}
+
+function daysBetween(date1, date2) {
+  const d1 = new Date(date1);
+  const d2 = new Date(date2);
+  return Math.ceil((d2 - d1) / (1000 * 60 * 60 * 24));
+}
+
+// ─── Tab 切换 ───
+let histChart = null;
+let allBatches = [];
+
+// ─── Tab 切换 ───
+function showTab(tab) {
+  document.getElementById('reportTab').style.display = 'none';
+  document.getElementById('equipmentTab').style.display = 'none';
+  document.getElementById('handoverTab').style.display = 'none';
+  if (tab === 'report') {
+    document.getElementById('reportTab').style.display = 'block';
+    loadReportTab();
+  } else if (tab === 'equipment') {
+    document.getElementById('equipmentTab').style.display = 'block';
+    loadEquipmentTab();
+  } else if (tab === 'handover') {
+    document.getElementById('handoverTab').style.display = 'block';
+    loadShiftTabData();
+  } else if (tab === 'main') {
+    document.getElementById('qualityOverlay').classList.remove('active');
+  }
+}
+
+async function loadReportTab() {
+  // 加载批次列表
+  const list = await loadJSON('/batches') || [];
+  allBatches = list;
+  const sel = document.getElementById('histBatch');
+  sel.innerHTML = '<option value="">— 选择批次 —</option>' +
+    list.map(b => `<option value="${b.batch_id}">${b.batch_id} ${b.stage || ''}</option>`).join('');
+
+  // 默认时间范围：最近1小时
+  const now = new Date();
+  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  document.getElementById('histEnd').value = toDatetimeLocal(now);
+  document.getElementById('histStart').value = toDatetimeLocal(oneHourAgo);
+  document.getElementById('histStatus').textContent = '';
+
+  // 初始化 ECharts
+  initHistChart();
+}
+
+function toDatetimeLocal(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function initHistChart() {
+  if (histChart) { histChart.dispose(); histChart = null; }
+  histChart = echarts.init(document.getElementById('histChart'));
+  const option = {
+    backgroundColor: '#111827',
+    textStyle: { color: '#8b9ab5', fontFamily: 'JetBrains Mono, Consolas, monospace' },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: '#1a2332',
+      borderColor: '#2d4a6f',
+      textStyle: { color: '#e2e8f0', fontSize: 12 },
+      formatter: function(params) {
+        let ts = params[0] && params[0].axisValue ? params[0].axisValue : '';
+        let html = `<div style="font-size:11px;color:#4a5d7a;margin-bottom:4px">${ts}</div>`;
+        params.forEach(p => {
+          if (p.value != null && p.value !== '-') {
+            const colors = {'温度':'#ff4757','pH':'#3b9eff','DO':'#00d4aa','转速':'#ffb020','压力':'#a855f7'};
+            html += `<div style="display:flex;justify-content:space-between;gap:16px">
+              <span style="color:${colors[p.seriesName]||'#e2e8f0'};font-size:12px">${p.seriesName}</span>
+              <span style="color:#e2e8f0;font-size:12px;font-weight:600">${parseFloat(p.value).toFixed(2)}</span>
+            </div>`;
+          }
+        });
+        return html;
+      }
+    },
+    legend: {
+      data: ['温度', 'pH', 'DO', '转速', '压力'],
+      bottom: 0,
+      textStyle: { color: '#8b9ab5', fontSize: 11 },
+      pageTextStyle: { color: '#8b9ab5' },
+    },
+    grid: { top: 10, right: 60, bottom: 60, left: 50, containLabel: false },
+    xAxis: {
+      type: 'category', boundaryGap: false,
+      axisLine: { lineStyle: { color: '#1f2d42' } },
+      axisLabel: { color: '#4a5d7a', fontSize: 10, rotate: 30 },
+      splitLine: { show: false },
+    },
+    yAxis: [
+      { name: '温度°C', type: 'value', position: 'left',
+        axisLine: { lineStyle: { color: '#ff4757' } }, axisLabel: { color: '#ff4757', fontSize: 10 },
+        splitLine: { lineStyle: { color: '#1f2d42', type: 'dashed' } }, min: 30, max: 42 },
+      { name: 'pH', type: 'value', position: 'right', offset: 0,
+        axisLine: { lineStyle: { color: '#3b9eff' } }, axisLabel: { color: '#3b9eff', fontSize: 10 },
+        splitLine: { show: false }, min: 4, max: 8 },
+      { name: 'DO%', type: 'value', position: 'right', offset: 45,
+        axisLine: { lineStyle: { color: '#00d4aa' } }, axisLabel: { color: '#00d4aa', fontSize: 10 },
+        splitLine: { show: false }, min: 0, max: 100 },
+      { name: '转速', type: 'value', position: 'right', offset: 90,
+        axisLine: { lineStyle: { color: '#ffb020' } }, axisLabel: { color: '#ffb020', fontSize: 10 },
+        splitLine: { show: false }, min: 50, max: 250 },
+      { name: '压力', type: 'value', position: 'right', offset: 135,
+        axisLine: { lineStyle: { color: '#a855f7' } }, axisLabel: { color: '#a855f7', fontSize: 10 },
+        splitLine: { show: false }, min: 0.5, max: 1.5 },
+    ],
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      { type: 'slider', start: 0, end: 100, height: 20, bottom: 35,
+        borderColor: '#1f2d42', backgroundColor: '#111827',
+        fillerColor: '#2d4a6f44', handleStyle: { color: '#3b9eff' },
+        textStyle: { color: '#4a5d7a', fontSize: 10 }, }
+    ],
+    series: [
+      { name: '温度', type: 'line', yAxisIndex: 0, smooth: true, symbol: 'none',
+        lineStyle: { color: '#ff4757', width: 1.5 }, data: [] },
+      { name: 'pH', type: 'line', yAxisIndex: 1, smooth: true, symbol: 'none',
+        lineStyle: { color: '#3b9eff', width: 1.5 }, data: [] },
+      { name: 'DO', type: 'line', yAxisIndex: 2, smooth: true, symbol: 'none',
+        lineStyle: { color: '#00d4aa', width: 1.5 }, data: [] },
+      { name: '转速', type: 'line', yAxisIndex: 3, smooth: true, symbol: 'none',
+        lineStyle: { color: '#ffb020', width: 1.5 }, data: [] },
+      { name: '压力', type: 'line', yAxisIndex: 4, smooth: true, symbol: 'none',
+        lineStyle: { color: '#a855f7', width: 1.5 }, data: [] },
+    ],
+  };
+  histChart.setOption(option);
+  window.addEventListener('resize', () => histChart && histChart.resize());
+}
+
+async function queryHistory() {
+  const batch_id = document.getElementById('histBatch').value;
+  const start = document.getElementById('histStart').value;
+  const end = document.getElementById('histEnd').value;
+  if (!batch_id) { document.getElementById('histStatus').textContent = '请选择批次'; return; }
+
+  document.getElementById('histStatus').textContent = '查询中...';
+  const params = new URLSearchParams();
+  if (start) params.append('start', start);
+  if (end) params.append('end', end);
+
+  const data = await loadJSON(`/batches/${batch_id}/history?${params}`);
+  const records = data || [];
+
+  document.getElementById('histStatus').textContent = `共 ${records.length} 条记录`;
+
+  if (records.length === 0) {
+    histChart.setOption({
+      xAxis: { data: [] },
+      series: [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }],
+    });
+    renderHistSummary([]);
+    return;
+  }
+
+  // 按时间排序
+  records.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  const times = records.map(r => {
+    const d = new Date(r.timestamp);
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  });
+  const temp = records.map(r => r.temp != null ? r.temp : '-');
+  const ph = records.map(r => r.pH != null ? r.pH : '-');
+  const DO = records.map(r => r.DO != null ? r.DO : '-');
+  const stir = records.map(r => r.stir_speed != null ? r.stir_speed : '-');
+  const pressure = records.map(r => r.pressure != null ? r.pressure : '-');
+
+  histChart.setOption({
+    xAxis: { data: times },
+    series: [
+      { name: '温度', data: temp },
+      { name: 'pH', data: ph },
+      { name: 'DO', data: DO },
+      { name: '转速', data: stir },
+      { name: '压力', data: pressure },
+    ],
+  });
+
+  renderHistSummary(records);
+}
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function renderHistSummary(records) {
+  const el = document.getElementById('histSummary');
+  if (!records || records.length === 0) {
+    el.innerHTML = '';
+    return;
+  }
+  const nums = (key, unit, decimals) => {
+    const vals = records.map(r => r[key]).filter(v => v != null);
+    if (!vals.length) return { min: '-', max: '-', avg: '-' };
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    return { min: vals.reduce((a, b) => Math.min(a, b), Infinity).toFixed(decimals),
+             max: vals.reduce((a, b) => Math.max(a, b), -Infinity).toFixed(decimals),
+             avg: avg.toFixed(decimals) };
+  };
+  const tempS = nums('temp', '°C', 1);
+  const phS = nums('pH', '', 2);
+  const doS = nums('DO', '%', 1);
+  const stirS = nums('stir_speed', 'rpm', 0);
+  const presS = nums('pressure', 'bar', 2);
+  const specs = [
+    { label: '温度 °C', min: tempS.min, max: tempS.max, avg: tempS.avg, color: '#ff4757' },
+    { label: 'pH 值', min: phS.min, max: phS.max, avg: phS.avg, color: '#3b9eff' },
+    { label: '溶解氧 DO%', min: doS.min, max: doS.max, avg: doS.avg, color: '#00d4aa' },
+    { label: '转速 rpm', min: stirS.min, max: stirS.max, avg: stirS.avg, color: '#ffb020' },
+    { label: '压力 bar', min: presS.min, max: presS.max, avg: presS.avg, color: '#a855f7' },
+  ];
+  el.innerHTML = specs.map(s => `
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:10px 12px;">
+      <div style="font-size:10px;color:${s.color};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">${s.label}</div>
+      <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px">
+        <span style="color:var(--text-dim)">Min</span><span style="color:var(--text-primary)">${s.min}</span>
+        <span style="color:var(--text-dim)">Max</span><span style="color:var(--text-primary)">${s.max}</span>
+        <span style="color:var(--text-dim)">Avg</span><span style="color:${s.color};font-weight:600">${s.avg}</span>
+      </div>
+    </div>`).join('');
+}
+
+// ─── 质量管理 Tab ───
+let currentReviewTestId = null;
+
+function showQualityTab() {
+  document.getElementById('qualityOverlay').classList.add('active');
+  switchQualityTab('tests', document.querySelector('.quality-tab-btn'));
+}
+
+function switchQualityTab(tab, btn) {
+  document.querySelectorAll('.quality-tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.quality-panel').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (tab === 'tests') {
+    document.getElementById('qualityTestsPanel').classList.add('active');
+    loadQualityTests();
+  } else {
+    document.getElementById('qualitySpecsPanel').classList.add('active');
+    loadQualitySpecs();
+  }
+}
+
+function openNewQCOffcanvas() {
+  document.getElementById('qcNewForm').style.display = 'block';
+  document.getElementById('qcReviewForm').classList.remove('active');
+}
+
+async function submitNewQC() {
+  const batch_id = document.getElementById('qcFormBatch').value.trim();
+  const stage = document.getElementById('qcFormStage').value;
+  const tester = document.getElementById('qcFormTester').value.trim();
+  if (!batch_id || !tester) { alert('请填写批次ID和检验员'); return; }
+  const payload = {
+    batch_id, stage, tester,
+    enzyme_activity: parseFloat(document.getElementById('qcFormEnzyme').value) || null,
+    moisture: parseFloat(document.getElementById('qcFormMoisture').value) || null,
+    microbial_count: parseInt(document.getElementById('qcFormMicro').value) || null,
+    pH_value: parseFloat(document.getElementById('qcFormPH').value) || null,
+    appearance: document.getElementById('qcFormAppearance').value.trim() || null,
+    remark: document.getElementById('qcFormRemark').value.trim() || null,
+  };
+  const r = await fetch(API + '/quality/tests', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const j = await r.json();
+  if (j.code === 0) {
+    document.getElementById('qcNewForm').style.display = 'none';
+    // clear form
+    ['qcFormBatch','qcFormEnzyme','qcFormMoisture','qcFormMicro','qcFormPH','qcFormAppearance','qcFormRemark'].forEach(id => document.getElementById(id).value = '');
+    loadQualityTests();
+    if (j.data && j.data.judge && j.data.judge.result === 'fail') {
+      alert('质检不合格，已触发系统告警！');
+    }
+  } else {
+    alert('错误: ' + j.message);
+  }
+}
+
+async function loadQualityTests() {
+  const filter = document.getElementById('qcFilterResult').value;
+  let url = API + '/quality/tests';
+  if (filter) url += '?result=' + filter;
+  const data = await loadJSON('/quality/tests' + (filter ? '?result=' + filter : ''));
+  const tests = data || [];
+  document.getElementById('qcTotalCount').textContent = tests.length;
+  const stageLabels = {in_process:'加工中', final_product:'成品', incoming:'来料'};
+  const resultLabels = {pass:'合格', fail:'不合格', warning:'告警', pending:'待判定'};
+  document.getElementById('qcTableBody').innerHTML = tests.length === 0
+    ? '<tr><td colspan="12" style="text-align:center;color:var(--text-dim);padding:24px);">暂无记录</td></tr>'
+    : tests.map(t => {
+        const detail = t.result_detail ? JSON.parse(t.result_detail) : [];
+        const detailHtml = detail.length > 0
+          ? detail.map(d => {
+              const icon = d.type === 'low' ? '↓' : '↑';
+              return `<span style="color:var(--red)">${d.param}${icon}:${d.value}${d.unit||''} (限:${d.lo!=null?d.lo:'–'}/${d.hi!=null?d.hi:'–'})</span>`;
+            }).join('<br>')
+          : '';
+        const reviewedInfo = t.reviewed_by
+          ? `<div style="font-size:10px;color:var(--text-dim)">${t.reviewed_by} ${t.reviewed_at ? new Date(t.reviewed_at).toLocaleDateString('zh-CN') : ''}</div>`
+          : '';
+        return `<tr>
+          <td><span style="font-family:var(--font-mono);font-size:11px">${t.test_id}</span></td>
+          <td><span style="font-family:var(--font-mono);font-size:11px">${t.batch_id}</span></td>
+          <td>${stageLabels[t.stage] || t.stage}</td>
+          <td>${t.enzyme_activity ?? '–'}</td>
+          <td>${t.moisture ?? '–'}</td>
+          <td>${t.microbial_count ?? '–'}</td>
+          <td>${t.pH_value ?? '–'}</td>
+          <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.appearance||''}">${t.appearance || '–'}</td>
+          <td><span class="result-badge ${t.result}">${resultLabels[t.result] || '–'}</span>${reviewedInfo}</td>
+          <td style="font-size:11px;max-width:180px;">${detailHtml || '–'}</td>
+          <td>${t.reviewed_by ? '<span style="font-size:10px;color:var(--green)">已审核</span>' : (t.result !== 'pending' ? '<button class="review-btn" onclick="openReview(\'' + t.test_id + '\')">审核</button>' : '–')}</td>
+          <td><button class="review-btn" onclick="reJudge(\'' + t.test_id + '\')">重判</button></td>
+        </tr>`;
+      }).join('');
+}
+
+function openReview(test_id) {
+  currentReviewTestId = test_id;
+  document.getElementById('qcReviewForm').classList.add('active');
+  document.getElementById('reviewerName').value = '';
+  document.getElementById('reviewResult').value = 'pass';
+  document.getElementById('reviewRemark').value = '';
+}
+
+async function submitReview() {
+  if (!currentReviewTestId) return;
+  const reviewed_by = document.getElementById('reviewerName').value.trim();
+  const result = document.getElementById('reviewResult').value;
+  const review_remark = document.getElementById('reviewRemark').value.trim();
+  if (!reviewed_by) { alert('请填写审核人'); return; }
+  const r = await fetch(API + '/quality/tests/' + currentReviewTestId + '/review', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({reviewed_by, result, review_remark})
+  });
+  const j = await r.json();
+  if (j.code === 0) {
+    document.getElementById('qcReviewForm').classList.remove('active');
+    currentReviewTestId = null;
+    loadQualityTests();
+  } else {
+    alert('错误: ' + j.message);
+  }
+}
+
+async function reJudge(test_id) {
+  const r = await fetch(API + '/quality/tests/' + test_id + '/judge', {method: 'POST'});
+  const j = await r.json();
+  if (j.code === 0) loadQualityTests();
+  else alert('错误: ' + j.message);
+}
+
+// 质量标准
+async function loadQualitySpecs() {
+  const specs = await loadJSON('/quality/specs') || [];
+  document.getElementById('specTotalCount').textContent = specs.length;
+  if (specs.length === 0) {
+    document.getElementById('specGrid').innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:24px;grid-column:1/-1;">暂无标准</div>';
+    return;
+  }
+  // 按 product_type + stage 分组
+  const groups = {};
+  specs.forEach(s => {
+    const key = s.product_type + '|' + s.stage;
+    if (!groups[key]) groups[key] = {product_type: s.product_type, stage: s.stage, params: []};
+    groups[key].params.push(s);
+  });
+  const stageLabels = {in_process:'加工中', final_product:'成品', incoming:'来料', all:'通用'};
+  const paramLabels = {enzyme_activity:'酶活', moisture:'水分', microbial_count:'微生物', pH_value:'pH值', appearance:'外观'};
+  document.getElementById('specGrid').innerHTML = Object.values(groups).map(g => {
+    const paramHtml = g.params.map(p => {
+      const lo = p.lo != null ? p.lo : '–';
+      const hi = p.hi != null ? p.hi : '–';
+      const range = (p.lo != null && p.hi != null) ? `${lo} ~ ${hi}` : (p.lo != null ? `≥ ${lo}` : `≤ ${hi}`);
+      return `<div class="spec-param">
+        <span class="spec-param-name">${paramLabels[p.param_name] || p.param_name}</span>
+        <span class="spec-param-range">${range} ${p.unit || ''}</span>
+      </div>`;
+    }).join('');
+    return `<div class="spec-card">
+      <div class="spec-card-header">
+        <span class="spec-card-id">${g.product_type}</span>
+        <span class="spec-card-badge">${stageLabels[g.stage] || g.stage}</span>
+      </div>
+      <div class="spec-params">${paramHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+async function submitNewSpec() {
+  const product_type = document.getElementById('specProductType').value;
+  const stage = document.getElementById('specStage').value;
+  const param_name = document.getElementById('specParamName').value;
+  const lo = parseFloat(document.getElementById('specLo').value) || null;
+  const hi = parseFloat(document.getElementById('specHi').value) || null;
+  const unit = document.getElementById('specUnit').value.trim() || null;
+  if (!product_type || !stage || !param_name) { alert('请填写必填字段'); return; }
+  if (lo === null && hi === null) { alert('请填写上限或下限'); return; }
+  const r = await fetch(API + '/quality/specs', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({product_type, stage, param_name, lo, hi, unit})
+  });
+  const j = await r.json();
+  if (j.code === 0) {
+    ['specLo','specHi','specUnit'].forEach(id => document.getElementById(id).value = '');
+    loadQualitySpecs();
+  } else {
+    alert('错误: ' + j.message);
+  }
+}
+
+// ─── 交接班管理 ───
+let allShifts = [];
+let handoverHistory = [];
+let currentHandoverRecord = null;
+
+const SHIFT_TYPE_NAMES = { early: '早班', mid: '中班', night: '夜班' };
+const SHIFT_TYPE_RANGES = { early: '08:00-16:00', mid: '16:00-24:00', night: '00:00-08:00' };
+const HANDOVER_TYPE_NAMES = { pre_shift: '班前交接', mid_shift: '班中交接', shift_end: '交班', post_shift: '班后交接' };
+
+async function loadShiftTabData() {
+  await Promise.all([loadCurrentShift(), loadTodayShifts(), loadHandoverHistory()]);
+  renderCurrentShift();
+  renderTodayShifts();
+  renderHandoverHistory();
+  renderShiftStatusBar();
+}
+
+async function loadCurrentShift() {
+  // 获取当前活跃班次
+  const current = await loadJSON('/shifts/current');
+  if (current) {
+    allShifts = [current];
+  }
+}
+
+async function loadTodayShifts() {
+  const today = new Date().toISOString().slice(0, 10);
+  const shifts = await loadJSON('/shifts?date=' + today) || [];
+  if (allShifts.length === 0 || allShifts[0].shift_date !== today) {
+    allShifts = shifts;
+  }
+}
+
+async function loadHandoverHistory() {
+  handoverHistory = await loadJSON('/handover?limit=20') || [];
+}
+
+function renderCurrentShift() {
+  const current = allShifts.find(s => s.status === 'active') || allShifts[0];
+  const el = document.getElementById('currentShiftContent');
+  if (!current) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:13px;">暂无班次记录</div>';
+    return;
+  }
+  const statusClass = current.status === 'active' ? 'var(--green)' : current.status === 'closed' ? 'var(--text-dim)' : 'var(--amber)';
+  const statusText = current.status === 'active' ? '进行中' : current.status === 'closed' ? '已结束' : '暂停';
+  el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+    <div>
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">班次</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text-primary);">${SHIFT_TYPE_NAMES[current.shift_type] || current.shift_type}</div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">时间</div>
+      <div style="font-size:13px;font-family:var(--font-mono);color:var(--text-primary);">${SHIFT_TYPE_RANGES[current.shift_type] || '—'}</div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">班长</div>
+      <div style="font-size:13px;color:var(--text-primary);">${current.leader || '未指定'}</div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">状态</div>
+      <span style="font-size:12px;padding:2px 8px;border-radius:10px;background:${statusClass}22;color:${statusClass};border:1px solid ${statusClass}44;">● ${statusText}</span>
+    </div>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px;">
+    <button onclick="updateCurrentShiftStatus('closed')" style="background:var(--green);color:#000;border:none;padding:4px 12px;border-radius:4px;font-size:11px;cursor:pointer;">结束班次</button>
+    <button onclick="openHandoverModal('mid_shift')" style="background:var(--border);color:var(--text-primary);border:1px solid var(--border-bright);padding:4px 12px;border-radius:4px;font-size:11px;cursor:pointer;">班中交接</button>
+  </div>`;
+}
+
+function renderTodayShifts() {
+  const el = document.getElementById('todayShiftList');
+  const today = new Date().toISOString().slice(0, 10);
+  const shifts = allShifts.filter(s => s.shift_date === today);
+  if (shifts.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:12px;">今日暂无班次</div>';
+    return;
+  }
+  el.innerHTML = shifts.map(s => {
+    const statusClass = s.status === 'active' ? 'var(--green)' : s.status === 'closed' ? 'var(--text-dim)' : 'var(--amber)';
+    const statusText = s.status === 'active' ? '进行中' : s.status === 'closed' ? '已结束' : '暂停';
+    const typeName = SHIFT_TYPE_NAMES[s.shift_type] || s.shift_type;
+    const range = SHIFT_TYPE_RANGES[s.shift_type] || '—';
+    return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:10px 12px;${s.status === 'active' ? 'border-color:var(--green);box-shadow:0 0 8px var(--green-dim);' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-size:13px;font-weight:600;color:var(--text-primary);">${typeName}</span>
+        <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${statusClass}22;color:${statusClass};">${statusText}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">${range}</div>
+      <div style="font-size:11px;color:var(--text-secondary);">班长: ${s.leader || '未指定'}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderHandoverHistory() {
+  const el = document.getElementById('handoverHistoryList');
+  if (handoverHistory.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px;">暂无交接记录</div>';
+    return;
+  }
+  el.innerHTML = handoverHistory.map(r => {
+    const typeName = HANDOVER_TYPE_NAMES[r.handover_type] || r.handover_type;
+    const typeColor = r.handover_type === 'shift_end' ? 'var(--amber)' : r.handover_type === 'pre_shift' ? 'var(--blue)' : 'var(--purple)';
+    const statusClass = r.status === 'confirmed' ? 'var(--green)' : r.status === 'pending' ? 'var(--amber)' : 'var(--text-dim)';
+    const statusText = r.status === 'confirmed' ? '已确认' : r.status === 'pending' ? '待确认' : '已取消';
+    const timeStr = r.handover_time ? new Date(r.handover_time).toLocaleString('zh-CN') : '—';
+    const outShiftName = SHIFT_TYPE_NAMES[r.shift_out_type] || r.shift_out_type || '';
+    const inShiftName = SHIFT_TYPE_NAMES[r.shift_in_type] || r.shift_in_type || '';
+    const contentSummary = r.content ? (r.content.length > 80 ? r.content.slice(0, 80) + '...' : r.content) : '—';
+    return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:${typeColor}22;color:${typeColor};">${typeName}</span>
+          <span style="font-size:11px;color:var(--text-secondary);">${outShiftName} → ${inShiftName || '待接班'}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${statusClass}22;color:${statusClass};">${statusText}</span>
+          ${r.status === 'pending' ? `<button onclick="openHandoverConfirm(${r.record_id})" style="background:var(--green);color:#000;border:none;padding:2px 8px;border-radius:3px;font-size:10px;cursor:pointer;">确认</button>` : ''}
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">${timeStr} · 交班人: ${r.created_by || '—'}</div>
+      <div style="font-size:12px;color:var(--text-primary);">${contentSummary}</div>
+      ${r.confirmed_by ? `<div style="font-size:10px;color:var(--green);margin-top:3px;">✓ 已由 ${r.confirmed_by} ${r.confirmed_at ? new Date(r.confirmed_at).toLocaleString('zh-CN') : ''} 确认</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderShiftStatusBar() {
+  const current = allShifts.find(s => s.status === 'active');
+  const bar = document.getElementById('shiftStatusBar');
+  if (!current) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const typeName = SHIFT_TYPE_NAMES[current.shift_type] || current.shift_type;
+  const dot = document.getElementById('shiftStatusDot');
+  dot.className = current.status === 'active' ? 'status-dot' : 'status-dot amber';
+  document.getElementById('shiftStatusText').textContent = `当前班次: ${typeName} ${current.leader ? '· ' + current.leader : ''}`;
+}
+
+async function updateCurrentShiftStatus(status) {
+  const current = allShifts.find(s => s.status === 'active');
+  if (!current) return;
+  const r = await fetch(API + '/shifts/' + current.shift_id, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status })
+  });
+  const j = await r.json();
+  if (j.code === 0) {
+    await loadShiftTabData();
+  } else {
+    alert('更新失败: ' + j.message);
+  }
+}
+
+function openHandoverModal(type) {
+  currentHandoverRecord = null;
+  document.getElementById('handoverModal').style.display = 'flex';
+  document.getElementById('handoverError').style.display = 'none';
+  const typeNames = { pre_shift: '班前交接', mid_shift: '班中交接', shift_end: '交班', post_shift: '班后交接' };
+  document.getElementById('handoverModalTitle').textContent = typeNames[type] || '交接班';
+  document.getElementById('handoverType').value = type;
+  // 填充班次选择
+  const shiftOutSel = document.getElementById('handoverShiftOut');
+  const shiftInSel = document.getElementById('handoverShiftIn');
+  shiftOutSel.innerHTML = '<option value="">— 选择班次 —</option>';
+  shiftInSel.innerHTML = '<option value="">— 选择班次 —</option>';
+  allShifts.forEach(s => {
+    const label = `${SHIFT_TYPE_NAMES[s.shift_type] || s.shift_type} ${s.shift_date} ${s.leader ? '· ' + s.leader : ''}`;
+    const opt = `<option value="${s.shift_id}">${label}</option>`;
+    if (s.status === 'active') {
+      shiftOutSel.innerHTML += opt;
+      if (type === 'shift_end') shiftInSel.innerHTML += opt;
+    }
+    if (s.status === 'closed' || s.status === 'active') {
+      if (type === 'pre_shift') shiftInSel.innerHTML += opt;
+    }
+  });
+  // 自动选中当前active班次
+  const activeShift = allShifts.find(s => s.status === 'active');
+  if (activeShift) shiftOutSel.value = activeShift.shift_id;
+  document.getElementById('handoverContent').value = '';
+  document.getElementById('handoverIssues').value = '';
+  document.getElementById('handoverCreator').value = '';
+}
+
+function closeHandoverModal() {
+  document.getElementById('handoverModal').style.display = 'none';
+}
+
+function openHandoverConfirm(recordId) {
+  const rec = handoverHistory.find(r => r.record_id === recordId);
+  if (!rec) return;
+  currentHandoverRecord = rec;
+  document.getElementById('handoverConfirmModal').style.display = 'flex';
+  document.getElementById('handoverConfirmInfo').textContent = `接班人请确认 ${HANDOVER_TYPE_NAMES[rec.handover_type] || rec.handover_type}`;
+  const content = rec.content || '—';
+  const issues = rec.issues ? JSON.parse(rec.issues) : [];
+  let html = `<div style="margin-bottom:6px;">${content}</div>`;
+  if (issues.length > 0) {
+    html += '<div style="color:var(--amber);margin-top:6px;">遗留问题:</div>';
+    issues.forEach(i => {
+      html += `<div style="color:var(--amber);font-size:11px;margin-left:8px;">• ${i.desc || JSON.stringify(i)}</div>`;
+    });
+  }
+  document.getElementById('handoverConfirmContent').innerHTML = html;
+  document.getElementById('handoverConfirmer').value = '';
+}
+
+function closeHandoverConfirm() {
+  document.getElementById('handoverConfirmModal').style.display = 'none';
+  currentHandoverRecord = null;
+}
+
+async function submitHandover() {
+  const shift_id_out = document.getElementById('handoverShiftOut').value;
+  const shift_id_in = document.getElementById('handoverShiftIn').value || null;
+  const handover_type = document.getElementById('handoverType').value;
+  const content = document.getElementById('handoverContent').value.trim();
+  const issuesStr = document.getElementById('handoverIssues').value.trim();
+  const created_by = document.getElementById('handoverCreator').value.trim();
+  const errEl = document.getElementById('handoverError');
+  if (!shift_id_out) { errEl.textContent = '请选择交班班次'; errEl.style.display = 'block'; return; }
+  if (!content) { errEl.textContent = '请填写交接内容'; errEl.style.display = 'block'; return; }
+  if (!created_by) { errEl.textContent = '请填写交班人'; errEl.style.display = 'block'; return; }
+  errEl.style.display = 'none';
+  let issues = null;
+  if (issuesStr) {
+    try { issues = JSON.parse(issuesStr); } catch { issues = [{type:'一般', desc: issuesStr, priority:'medium'}]; }
+  }
+  const r = await fetch(API + '/handover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shift_id_out, shift_id_in, handover_type, content, issues, created_by })
+  });
+  const j = await r.json();
+  if (j.code === 0) {
+    closeHandoverModal();
+    await loadShiftTabData();
+  } else {
+    errEl.textContent = j.message || '创建失败';
+    errEl.style.display = 'block';
+  }
+}
+
+async function submitHandoverConfirm() {
+  if (!currentHandoverRecord) return;
+  const confirmed_by = document.getElementById('handoverConfirmer').value.trim();
+  if (!confirmed_by) { alert('请填写接班人姓名'); return; }
+  const r = await fetch(API + '/handover/' + currentHandoverRecord.record_id + '/confirm', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed_by })
+  });
+  const j = await r.json();
+  if (j.code === 0) {
+    closeHandoverConfirm();
+    await loadShiftTabData();
+  } else {
+    alert('确认失败: ' + j.message);
+  }
+}
+
+// WebSocket: 监听交接班更新
+socket && socket.on('handover_update', (msg) => {
+  if (msg && msg.record) loadHandoverHistory().then(renderHandoverHistory);
+});
+
+// ─── 启动 ───
+loadAll().then(() => connectWS());
+
+// 每 30 秒刷新基础数据
+setInterval(loadAll, 30000);
+
+// 每秒重绘曲线（保持最新状态）
+setInterval(drawChart, 1000);
+
+// ═══════════════════════════════════
+//  二级页面：发酵罐详情
+// ═══════════════════════════════════
+let tankDetailChart = null;
+let currentTankBatchId = null;
+
+function openTankDetail(batchId) {
+  currentTankBatchId = batchId;
+  const b = batches[batchId];
+  if (!b) return;
+  const params = b.current || {};
+
+  // 填充顶部信息
+  document.getElementById('tankDetailTitle').textContent = '发酵罐详情 — ' + (b.product_name || batchId);
+  document.getElementById('tankDetailBatch').textContent = batchId;
+  document.getElementById('tankDetailProduct').textContent = b.product_name || '—';
+
+  const stageLabels = {
+    pending:'等待',sterilization:'灭菌',seed:'种子培养',
+    fermentation:'发酵中',centrifugation:'离心',drying:'干燥',packaging:'包装',completed:'完成'
+  };
+  const stageEl = document.getElementById('tankDetailStage');
+  stageEl.textContent = stageLabels[b.stage] || b.stage || '—';
+  stageEl.style.background = 'var(--blue-dim)';
+  stageEl.style.color = 'var(--blue)';
+  stageEl.style.border = '1px solid #3b9eff44';
+  stageEl.style.display = 'inline-block';
+  stageEl.style.fontSize = '10px';
+  stageEl.style.padding = '2px 8px';
+  stageEl.style.borderRadius = '10px';
+
+  // 顶部4参数
+  const heroData = [
+    { label: '温度 °C', value: params.temp?.toFixed(1) ?? '—', color: 'temp', unit: '°C' },
+    { label: 'pH 值', value: params.pH?.toFixed(2) ?? '—', color: 'ph', unit: '' },
+    { label: '溶解氧 DO%', value: params.DO?.toFixed(1) ?? '—', color: 'do', unit: '%' },
+    { label: '转速 rpm', value: params.stir_speed?.toFixed(0) ?? '—', color: 'stir', unit: 'rpm' },
+  ];
+  document.getElementById('tankDetailHero').innerHTML = heroData.map(d => `
+    <div class="tank-hero-card">
+      <div class="tank-hero-label">${d.label}</div>
+      <div class="tank-hero-value ${d.color}">${d.value}</div>
+      <div class="tank-hero-unit">${d.unit}</div>
+    </div>`).join('');
+
+  // 关联告警
+  const allAlerts = Object.values(batches).flatMap(bb => bb.alerts || []).filter(a => a.batch_id === batchId);
+  document.getElementById('tankDetailAlertCount').textContent = allAlerts.length;
+  const alertItems = allAlerts.slice(0, 10);
+  document.getElementById('tankDetailAlerts').innerHTML = alertItems.length === 0
+    ? '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:16px;">暂无告警</div>'
+    : alertItems.map(a => {
+      const level = a.level || 'info';
+      const levelClass = level === 'critical' ? 'alert-level-critical' : level === 'warning' ? 'alert-level-warning' : 'alert-level-info';
+      const levelLabel = level === 'critical' ? '严重' : level === 'warning' ? '警告' : '提示';
+      const time = a.timestamp ? new Date(a.timestamp).toLocaleString('zh-CN') : '—';
+      return `<div class="alert-item">
+        <div class="alert-time">${time}</div>
+        <div class="alert-message"><span class="${levelClass}">[${levelLabel}]</span> ${a.message || a.alert_type || '—'}</div>
+      </div>`;
+    }).join('');
+
+  // 初始化或重置 chart
+  document.getElementById('tankDetailParamSelect').value = 'all';
+  initTankDetailChart();
+  document.getElementById('tankDetailOverlay').classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeTankDetail() {
+  document.getElementById('tankDetailOverlay').classList.remove('active');
+  document.body.style.overflow = '';
+  currentTankBatchId = null;
+  if (tankDetailChart) { tankDetailChart.dispose(); tankDetailChart = null; }
+}
+
+function initTankDetailChart() {
+  if (!document.getElementById('tankDetailChart')) return;
+  if (typeof echarts === 'undefined') { setTimeout(initTankDetailChart, 500); return; }
+  if (tankDetailChart) tankDetailChart.dispose();
+  tankDetailChart = echarts.init(document.getElementById('tankDetailChart'));
+  renderTankDetailChart();
+}
+
+async function renderTankDetailChart() {
+  if (!tankDetailChart || !currentTankBatchId) return;
+  const b = batches[currentTankBatchId];
+  const params = b?.current || {};
+
+  const param = document.getElementById('tankDetailParamSelect')?.value || 'all';
+  const series = [];
+  const legendData = [];
+
+  if (param === 'all' || param === 'temp') {
+    series.push({
+      name: '温度', type: 'line', smooth: true, symbol: 'none',
+      lineStyle: { color: '#ff4757', width: 2 },
+      data: [params.temp ?? '—', params.temp ?? '—'],
+    });
+    legendData.push('温度');
+  }
+  if (param === 'all' || param === 'pH') {
+    series.push({
+      name: 'pH', type: 'line', smooth: true, symbol: 'none',
+      lineStyle: { color: '#3b9eff', width: 2 },
+      yAxisIndex: 1,
+      data: [params.pH ?? '—', params.pH ?? '—'],
+    });
+    legendData.push('pH');
+  }
+  if (param === 'all' || param === 'DO') {
+    series.push({
+      name: 'DO', type: 'line', smooth: true, symbol: 'none',
+      lineStyle: { color: '#00d4aa', width: 2 },
+      yAxisIndex: 2,
+      data: [params.DO ?? '—', params.DO ?? '—'],
+    });
+    legendData.push('溶解氧');
+  }
+  if (param === 'all' || param === 'stir_speed') {
+    series.push({
+      name: '转速', type: 'line', smooth: true, symbol: 'none',
+      lineStyle: { color: '#ffb020', width: 2 },
+      yAxisIndex: 3,
+      data: [params.stir_speed ?? '—', params.stir_speed ?? '—'],
+    });
+    legendData.push('转速');
+  }
+  if (param === 'all' || param === 'pressure') {
+    series.push({
+      name: '压力', type: 'line', smooth: true, symbol: 'none',
+      lineStyle: { color: '#a855f7', width: 2 },
+      yAxisIndex: 4,
+      data: [params.pressure ?? '—', params.pressure ?? '—'],
+    });
+    legendData.push('压力');
+  }
+
+  tankDetailChart.setOption({
+    backgroundColor: 'transparent',
+    legend: { data: legendData, bottom: 0, textStyle: { color: '#8b9eff', fontSize: 11 } },
+    grid: { top: 10, right: 60, bottom: 50, left: 50 },
+    xAxis: { type: 'category', data: ['开始', '当前'], axisLine: { lineStyle: { color: '#1f2d42' } }, axisLabel: { color: '#4a5d7a', fontSize: 11 } },
+    yAxis: [
+      { name: '温度°C', type: 'value', axisLine: { lineStyle: { color: '#ff4757' } }, axisLabel: { color: '#ff4757', fontSize: 10 }, splitLine: { lineStyle: { color: '#1f2d42', type: 'dashed' } } },
+      { name: 'pH', type: 'value', axisLine: { lineStyle: { color: '#3b9eff' } }, axisLabel: { color: '#3b9eff', fontSize: 10 }, splitLine: { show: false } },
+      { name: 'DO%', type: 'value', axisLine: { lineStyle: { color: '#00d4aa' } }, axisLabel: { color: '#00d4aa', fontSize: 10 }, splitLine: { show: false } },
+      { name: '转速', type: 'value', axisLine: { lineStyle: { color: '#ffb020' } }, axisLabel: { color: '#ffb020', fontSize: 10 }, splitLine: { show: false } },
+      { name: '压力', type: 'value', axisLine: { lineStyle: { color: '#a855f7' } }, axisLabel: { color: '#a855f7', fontSize: 10 }, splitLine: { show: false } },
+    ],
+    series,
+  });
+}
+
+// ═══════════════════════════════════
+//  二级页面：工单列表详情
+// ═══════════════════════════════════
+function openOrdersDetail() {
+  // 填充产品筛选下拉
+  const productSelect = document.getElementById('ordersFilterProduct');
+  const products = [...new Set(orders.map(o => o.product_name).filter(Boolean))];
+  productSelect.innerHTML = '<option value="">全部产品</option>' + products.map(p => `<option value="${p}">${p}</option>`).join('');
+  document.getElementById('ordersFilterStatus').value = '';
+  document.getElementById('ordersFilterKeyword').value = '';
+  renderOrdersDetailTable();
+  document.getElementById('ordersDetailOverlay').classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeOrdersDetail() {
+  document.getElementById('ordersDetailOverlay').classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+function renderOrdersDetailTable() {
+  const status = document.getElementById('ordersFilterStatus').value;
+  const product = document.getElementById('ordersFilterProduct').value;
+  const keyword = (document.getElementById('ordersFilterKeyword')?.value || '').toLowerCase().trim();
+
+  const stageLabels = {
+    pending:'等待', sterilization:'灭菌', seed:'种子培养',
+    fermentation:'发酵中', centrifugation:'离心', drying:'干燥', packaging:'包装', completed:'完成'
+  };
+  const statusBadge = {
+    completed: { cls: 'completed', text: '已完成' },
+    in_progress: { cls: 'in_progress', text: '进行中' },
+    pending: { cls: 'pending', text: '待生产' },
+    cancelled: { cls: 'pending', text: '已取消' },
+  };
+
+  const filtered = orders.filter(o => {
+    if (status && o.status !== status) return false;
+    if (product && o.product_name !== product) return false;
+    if (keyword && !(o.order_id?.toLowerCase().includes(keyword) || o.batch_id?.toLowerCase().includes(keyword) || o.product_name?.toLowerCase().includes(keyword))) return false;
+    return true;
+  });
+
+  document.getElementById('ordersFilteredCount').textContent = `共 ${filtered.length} 条`;
+
+  const tbody = document.getElementById('ordersDetailBody');
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-dim);padding:24px;">暂无工单</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(o => {
+    const sb = statusBadge[o.status] || statusBadge.pending;
+    const bId = o.batch_id || '—';
+    const fermenter = o.fermenter_id || '—';
+    const planStart = o.plan_start_time ? new Date(o.plan_start_time).toLocaleDateString('zh-CN') : '—';
+    const actualStart = o.actual_start_time ? new Date(o.actual_start_time).toLocaleDateString('zh-CN') : '—';
+    const completedAt = o.completed_at ? new Date(o.completed_at).toLocaleDateString('zh-CN') : '—';
+    return `<tr>
+      <td><span style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary)">${o.order_id}</span></td>
+      <td><span style="font-family:var(--font-mono);font-size:11px">${bId}</span></td>
+      <td>${o.product_name || '—'}</td>
+      <td>${o.batch_size != null ? o.batch_size + ' kg' : '—'}</td>
+      <td>${fermenter}</td>
+      <td>${stageLabels[o.stage] || o.stage || '—'}</td>
+      <td><span class="order-badge ${sb.cls}">${sb.text}</span></td>
+      <td>${planStart}</td>
+      <td>${actualStart}</td>
+      <td>${completedAt}</td>
+      <td>
+        <button onclick="openTankDetail('${bId}')" style="background:var(--blue-dim);color:var(--blue);border:1px solid #3b9eff44;padding:2px 8px;border-radius:3px;font-size:11px;cursor:pointer;">查看批次</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════
+//  二级页面：告警详情
+// ═══════════════════════════════════
+let currentAlertDetailId = null;
+
+function openAlertDetail(batchId) {
+  currentAlertDetailId = batchId;
+  const allAlerts = Object.values(batches).flatMap(bb => bb.alerts || []).filter(a => a.batch_id === batchId);
+  const alert = allAlerts[0] || {};
+
+  const level = alert.level || 'info';
+  const levelColor = level === 'critical' ? 'var(--red)' : level === 'warning' ? 'var(--amber)' : 'var(--blue)';
+  const levelLabel = level === 'critical' ? '严重' : level === 'warning' ? '警告' : '提示';
+  const levelBg = level === 'critical' ? 'var(--red-dim)' : level === 'warning' ? 'var(--amber-dim)' : 'var(--blue-dim)';
+
+  document.getElementById('alertDetailOverlay').classList.add('active');
+  document.body.style.overflow = 'hidden';
+
+  // 元数据4卡片
+  document.getElementById('alertDetailMeta').innerHTML = `
+    <div class="alert-meta-card">
+      <div class="alert-meta-label">告警级别</div>
+      <div class="alert-meta-value" style="color:${levelColor}">${levelLabel}</div>
+    </div>
+    <div class="alert-meta-card">
+      <div class="alert-meta-label">批次ID</div>
+      <div class="alert-meta-value" style="color:var(--text-secondary);font-size:14px;">${batchId}</div>
+    </div>
+    <div class="alert-meta-card">
+      <div class="alert-meta-label">告警类型</div>
+      <div class="alert-meta-value" style="color:var(--text-secondary);font-size:14px;">${alert.alert_type || '—'}</div>
+    </div>
+    <div class="alert-meta-card">
+      <div class="alert-meta-label">发生时间</div>
+      <div class="alert-meta-value" style="color:var(--text-secondary);font-size:14px;">${alert.timestamp ? new Date(alert.timestamp).toLocaleString('zh-CN') : '—'}</div>
+    </div>`;
+
+  // 告警摘要
+  document.getElementById('alertDetailMain').innerHTML = `
+    <div style="font-size:14px;color:var(--text-primary);margin-bottom:12px;font-weight:600;">
+      <span style="color:${levelColor};">[${levelLabel}]</span>
+      ${alert.message || alert.alert_type || '暂无描述'}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:10px;">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">状态</div>
+        <span class="result-badge ${alert.status === 'resolved' ? 'resolved' : 'active'}">${alert.status === 'resolved' ? '已解除' : '活跃'}</span>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:10px;">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">关联设备</div>
+        <div style="font-size:12px;color:var(--text-primary);">${alert.equip_id || '—'}</div>
+      </div>
+    </div>`;
+
+  // 处置记录（模拟）
+  const disposals = alert.disposals || [];
+  document.getElementById('alertDetailDisposals').innerHTML = disposals.length === 0
+    ? '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:16px;">暂无处置记录，请及时处理该告警</div>'
+    : disposals.map(d => `
+      <div class="disposal-item">
+        <div class="disposal-time">${d.time ? new Date(d.time).toLocaleString('zh-CN') : '—'}</div>
+        <div class="disposal-content">${d.content || '—'}</div>
+        <div class="disposal-result"><span class="result-badge ${d.result === 'resolved' ? 'resolved' : 'acknowledged'}">${d.result === 'resolved' ? '已解除' : '处理中'}</span></div>
+      </div>`).join('');
+}
+
+function closeAlertDetail() {
+  document.getElementById('alertDetailOverlay').classList.remove('active');
+  document.body.style.overflow = '';
+  currentAlertDetailId = null;
+}
+
+// ═══════════════════════════════════
+//  绑定可点击事件（KPI + 发酵罐卡片）
+// ═══════════════════════════
+function bindClickableCards() {
+  // KPI 总工单 → 工单列表详情
+  const kpiTotal = document.getElementById('kpi-total');
+  if (kpiTotal && !kpiTotal.classList.contains('clickable')) {
+    kpiTotal.classList.add('clickable');
+    kpiTotal.style.cursor = 'pointer';
+    kpiTotal.title = '点击查看全部工单';
+    kpiTotal.addEventListener('click', openOrdersDetail);
+  }
+  // 所有发酵罐卡片 → 详情
+  document.querySelectorAll('.tank-card').forEach(card => {
+    if (!card.classList.contains('clickable')) {
+      card.classList.add('clickable');
+      card.addEventListener('click', function() {
+        const id = this.id.replace('tank-', '');
+        if (id) openTankDetail(id);
+      });
+    }
+  });
+}
+
+// 覆盖 renderTankCards 让卡片可点击
+const _origRenderTankCards = renderTankCards;
+renderTankCards = function() {
+  _origRenderTankCards();
+  setTimeout(bindClickableCards, 100);
+};
+
+// 告警条目点击 → 告警详情
+const _origRenderAlertLog = renderAlertLog;
+renderAlertLog = function(alerts) {
+  _origRenderAlertLog(alerts);
+  setTimeout(() => {
+    document.querySelectorAll('.alert-item').forEach(item => {
+      if (!item.classList.contains('clickable-alert')) {
+        item.classList.add('clickable-alert');
+        item.style.cursor = 'pointer';
+        item.addEventListener('click', function() {
+          const batchEl = this.querySelector('.alert-batch');
+          const batchId = batchEl?.textContent?.trim();
+          if (batchId) openAlertDetail(batchId);
+        });
+      }
+    });
+  }, 100);
+};
+
+// 初始化可点击卡片（首屏加载后）
+setTimeout(bindClickableCards, 1500);
+window.addEventListener('resize', () => { if (tankDetailChart) tankDetailChart.resize(); });
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     二级页面 Overlays（放在 </script> 之后）
+═════════════════════════════════════════════════════════════ -->
+// ─── 发酵罐详情 Overlay ───
+<div id="tankDetailOverlay" class="detail-overlay">
+  <div style="max-width:1200px;margin:0 auto;">
+    <div class="detail-header">
+      <div class="detail-title" id="tankDetailTitle">发酵罐详情</div>
+      <button class="detail-close" onclick="closeTankDetail()">返回总览</button>
+    </div>
+    <!-- 顶部4参数 -->
+    <div class="tank-detail-hero" id="tankDetailHero"></div>
+    <!-- 操作栏 -->
+    <div style="display:flex;gap:10px;margin-bottom:14px;align-items:center;">
+      <div style="font-size:12px;color:var(--text-dim);">批次ID: <span id="tankDetailBatch" style="font-family:var(--font-mono);color:var(--text-secondary)"></span></div>
+      <div style="font-size:12px;color:var(--text-dim);">产品: <span id="tankDetailProduct" style="color:var(--text-secondary)"></span></div>
+      <div style="font-size:12px;color:var(--text-dim);">阶段: <span id="tankDetailStage" class="tank-stage" style="margin:0"></span></div>
+      <div style="margin-left:auto;display:flex;gap:8px;">
+        <select id="tankDetailParamSelect" onchange="renderTankDetailChart()" style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-size:12px;">
+          <option value="all">全部参数</option>
+          <option value="temp">温度</option>
+          <option value="pH">pH值</option>
+          <option value="DO">溶解氧</option>
+          <option value="stir_speed">转速</option>
+          <option value="pressure">压力</option>
+        </select>
+      </div>
+    </div>
+    <!-- ECharts 曲线 -->
+    <div class="detail-section">
+      <div class="detail-section-header">实时参数曲线</div>
+      <div style="height:340px;position:relative;">
+        <div id="tankDetailChart" style="width:100%;height:100%;"></div>
+      </div>
+    </div>
+    <!-- 告警记录 -->
+    <div class="detail-section">
+      <div class="detail-section-header">关联告警 (<span id="tankDetailAlertCount">0</span> 条)</div>
+      <div class="detail-section-body" id="tankDetailAlerts">
+        <div style="color:var(--text-dim);font-size:12px;text-align:center;padding:16px;">暂无告警</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 工单列表详情 Overlay ─── -->
+<div id="ordersDetailOverlay" class="detail-overlay">
+  <div style="max-width:1200px;margin:0 auto;">
+    <div class="detail-header">
+      <div class="detail-title">工单列表</div>
+      <button class="detail-close" onclick="closeOrdersDetail()">返回总览</button>
+    </div>
+    <div class="filter-bar">
+      <div style="font-size:12px;color:var(--text-secondary);font-weight:600;">筛选:</div>
+      <select id="ordersFilterStatus" onchange="renderOrdersDetailTable()">
+        <option value="">全部状态</option>
+        <option value="pending">待生产</option>
+        <option value="in_progress">进行中</option>
+        <option value="completed">已完成</option>
+        <option value="cancelled">已取消</option>
+      </select>
+      <select id="ordersFilterProduct" onchange="renderOrdersDetailTable()">
+        <option value="">全部产品</option>
+      </select>
+      <input type="text" id="ordersFilterKeyword" placeholder="搜索工单/批次/产品..." oninput="renderOrdersDetailTable()" style="min-width:200px;">
+      <span style="margin-left:auto;font-size:12px;color:var(--text-dim);" id="ordersFilteredCount"></span>
+    </div>
+    <div class="detail-section">
+      <div style="overflow-x:auto;">
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th>工单ID</th>
+              <th>批次ID</th>
+              <th>产品</th>
+              <th>批量(kg)</th>
+              <th>发酵罐</th>
+              <th>阶段</th>
+              <th>状态</th>
+              <th>计划开始</th>
+              <th>实际开始</th>
+              <th>完成时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="ordersDetailBody">
+            <tr><td colspan="11" style="text-align:center;color:var(--text-dim);padding:24px;">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 告警详情 Overlay ─── -->
+<div id="alertDetailOverlay" class="detail-overlay">
+  <div style="max-width:900px;margin:0 auto;">
+    <div class="detail-header">
+      <div class="detail-title">告警详情</div>
+      <button class="detail-close" onclick="closeAlertDetail()">返回总览</button>
+    </div>
+    <div id="alertDetailMeta" class="alert-detail-meta"></div>
+    <div class="detail-section">
+      <div class="detail-section-header">告警摘要</div>
+      <div class="detail-section-body" id="alertDetailMain"></div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-header">处置记录</div>
+      <div class="detail-section-body" id="alertDetailDisposals">
+        <div style="color:var(--text-dim);font-size:12px;text-align:center;padding:16px;">暂无处置记录</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

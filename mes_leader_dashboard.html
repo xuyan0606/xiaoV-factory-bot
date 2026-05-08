@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRVAB 智慧工厂指挥中心</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0a0e17;
+  color: #e2e8f0;
+  min-height: 100vh;
+}
+
+/* === 顶栏 === */
+.topbar {
+  background: linear-gradient(135deg, #0d1420 0%, #111827 100%);
+  border-bottom: 1px solid #1a2332;
+  color: #fff;
+  padding: 0 24px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.topbar-logo { font-size: 22px; font-weight: 700; letter-spacing: 1px; color: #00d4aa; }
+.topbar-logo span { color: #4ecdc4; }
+.topbar-time { font-size: 14px; color: rgba(255,255,255,0.6); font-variant-numeric: tabular-nums; }
+.topbar-right { display: flex; align-items: center; gap: 16px; }
+.status-dot { width: 8px; height: 8px; background: #00d4aa; border-radius: 50%; animation: pulse 2s infinite; box-shadow: 0 0 8px #00d4aa; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* === 主布局 === */
+.main-container { display: grid; grid-template-columns: 340px 1fr 1fr 1fr; gap: 16px; padding: 16px; max-width: 1800px; margin: 0 auto; }
+.col-left { display: flex; flex-direction: column; gap: 16px; }
+.col-center { display: flex; flex-direction: column; gap: 16px; }
+.col-right { display: flex; flex-direction: column; gap: 16px; }
+.col-far-right { display: flex; flex-direction: column; gap: 16px; }
+
+/* === 面板通用 === */
+.panel {
+  background: #111827;
+  border: 1px solid #1a2332;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
+  overflow: hidden;
+}
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #1a2332;
+}
+.panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.5px;
+}
+.panel-title::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  background: #00d4aa;
+  border-radius: 2px;
+  box-shadow: 0 0 8px #00d4aa;
+}
+.panel-more {
+  font-size: 12px;
+  color: #00d4aa;
+  cursor: pointer;
+  text-decoration: none;
+  opacity: 0.8;
+}
+.panel-more:hover { opacity: 1; text-decoration: none; }
+
+/* === 面板可点击 === */
+.panel.clickable {
+  cursor: pointer;
+  transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
+}
+.panel.clickable:hover {
+  box-shadow: 0 4px 24px rgba(0,212,170,0.15);
+  transform: translateY(-1px);
+  border-color: #00d4aa44;
+}
+
+/* === KPI 卡片 === */
+.kpi-card { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #1a2332; }
+.kpi-card:last-child { border-bottom: none; }
+.kpi-icon { width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.kpi-icon.green { background: #00d4aa22; }
+.kpi-icon.blue { background: #3b9eff22; }
+.kpi-icon.purple { background: #9C27B022; }
+.kpi-icon.orange { background: #ff9a5622; }
+.kpi-info { flex: 1; min-width: 0; }
+.kpi-label { font-size: 11px; color: #64748b; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+.kpi-value { font-size: 20px; font-weight: 700; color: #e2e8f0; }
+.kpi-unit { font-size: 11px; color: #64748b; font-weight: 400; }
+.kpi-trend { font-size: 11px; padding: 2px 6px; border-radius: 4px; }
+.kpi-trend.up { background: #00d4aa22; color: #00d4aa; }
+.kpi-trend.down { background: #ff475722; color: #ff4757; }
+
+/* === 发酵罐卡片 === */
+.tank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tank-card {
+  background: #0d1420;
+  border: 1px solid #1a2332;
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.tank-card:hover { border-color: #00d4aa66; box-shadow: 0 0 12px #00d4aa22; }
+.tank-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.tank-name { font-size: 13px; font-weight: 700; color: #e2e8f0; }
+.tank-status { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.tank-status.running { background: #00d4aa22; color: #00d4aa; border: 1px solid #00d4aa44; }
+.tank-status.idle { background: #ff9a5622; color: #ff9a56; border: 1px solid #ff9a5644; }
+.tank-status.alert { background: #ff475722; color: #ff4757; border: 1px solid #ff475744; }
+.tank-params { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.tank-param { display: flex; flex-direction: column; }
+.tank-param-label { font-size: 10px; color: #4a5d7a; text-transform: uppercase; letter-spacing: 0.3px; }
+.tank-param-value { font-size: 13px; font-weight: 600; color: #94a3b8; }
+.tank-mini-chart { height: 30px; margin-top: 6px; }
+
+/* === 工单列表 === */
+.order-list { display: flex; flex-direction: column; gap: 8px; }
+.order-item {
+  background: #0d1420;
+  border-radius: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid #00d4aa;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.order-id { font-size: 13px; font-weight: 700; color: #e2e8f0; }
+.order-meta { font-size: 11px; color: #4a5d7a; margin-top: 2px; }
+.order-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.order-status.pending { background: #ff9a5622; color: #ff9a56; border: 1px solid #ff9a5644; }
+.order-status.scheduled { background: #3b9eff22; color: #3b9eff; border: 1px solid #3b9eff44; }
+.order-status.fermenting { background: #00d4aa22; color: #00d4aa; border: 1px solid #00d4aa44; }
+
+/* === 质量指标 === */
+.quality-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.quality-item {
+  background: #0d1420;
+  border: 1px solid #1a2332;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+.quality-label { font-size: 11px; color: #4a5d7a; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+.quality-value { font-size: 20px; font-weight: 700; color: #00d4aa; }
+.quality-value.good { color: #00d4aa; }
+.quality-value.warn { color: #ff9a56; }
+.quality-bar { height: 3px; background: #1a2332; border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.quality-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+.quality-bar-fill.green { background: linear-gradient(90deg, #00d4aa, #3b9eff); box-shadow: 0 0 6px #00d4aa66; }
+.quality-bar-fill.orange { background: linear-gradient(90deg, #ff9a56, #ff4757); }
+
+/* === 设备状态 === */
+.eq-list { display: flex; flex-direction: column; gap: 8px; }
+.eq-item { display: flex; align-items: center; gap: 10px; }
+.eq-icon { width: 32px; height: 32px; background: #0d1420; border: 1px solid #1a2332; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.eq-info { flex: 1; }
+.eq-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+.eq-location { font-size: 11px; color: #4a5d7a; }
+.eq-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.eq-badge.ok { background: #00d4aa22; color: #00d4aa; border: 1px solid #00d4aa44; }
+.eq-badge.warn { background: #ff9a5622; color: #ff9a56; border: 1px solid #ff9a5644; }
+.eq-badge.alert { background: #ff475722; color: #ff4757; border: 1px solid #ff475744; }
+
+/* === 告警列表 === */
+.alert-list { display: flex; flex-direction: column; gap: 6px; }
+.alert-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-radius: 8px; background: #ff9a5611; border: 1px solid #ff9a5622; }
+.alert-item.critical { background: #ff475711; border-color: #ff475722; }
+.alert-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.alert-content { flex: 1; }
+.alert-msg { font-size: 12px; font-weight: 600; color: #e2e8f0; }
+.alert-time { font-size: 10px; color: #4a5d7a; margin-top: 2px; }
+.alert-level { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 600; }
+.alert-level.warn { background: #ff9a5622; color: #ff9a56; }
+.alert-level.error { background: #ff475722; color: #ff4757; }
+
+/* === 今日产出 === */
+.output-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1a2332; }
+.output-row:last-child { border-bottom: none; }
+.output-name { font-size: 13px; color: #94a3b8; }
+.output-value { font-size: 15px; font-weight: 700; color: #e2e8f0; }
+.output-unit { font-size: 11px; color: #4a5d7a; }
+
+/* === 原料库存 === */
+.mat-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #1a2332; font-size: 12px; }
+.mat-row:last-child { border-bottom: none; }
+.mat-name { color: #94a3b8; }
+.mat-qty { font-weight: 700; color: #e2e8f0; }
+.mat-level { display: flex; align-items: center; gap: 6px; }
+.bar-sm { width: 50px; height: 5px; background: #1a2332; border-radius: 3px; overflow: hidden; }
+.bar-sm-fill { height: 100%; border-radius: 3px; }
+.bar-sm-fill.high { background: #00d4aa; box-shadow: 0 0 4px #00d4aa66; }
+.bar-sm-fill.mid { background: #ff9a56; }
+.bar-sm-fill.low { background: #ff4757; }
+
+/* === 班组状态 === */
+.shift-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #1a2332; }
+.shift-item:last-child { border-bottom: none; }
+.shift-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+.shift-time { font-size: 11px; color: #4a5d7a; }
+.shift-members { font-size: 11px; background: #00d4aa22; color: #00d4aa; padding: 2px 8px; border-radius: 8px; border: 1px solid #00d4aa44; }
+
+/* === 能耗/维保/活动 === */
+.mini-list { display: flex; flex-direction: column; gap: 6px; }
+.mini-item { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 6px 8px; background: #0d1420; border-radius: 6px; border: 1px solid #1a2332; }
+.mini-item-label { color: #64748b; }
+.mini-item-value { font-weight: 600; color: #94a3b8; }
+.rank-list { display: flex; flex-direction: column; gap: 6px; }
+.rank-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.rank-num { width: 18px; height: 18px; background: #00d4aa; color: #000; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.rank-num.n2 { background: #3b9eff; }
+.rank-num.n3 { background: #9C27B0; }
+.rank-name { flex: 1; color: #94a3b8; }
+.rank-value { font-weight: 700; color: #e2e8f0; }
+
+/* === 实时曲线 === */
+.chart-container { height: 60px; position: relative; margin-top: 8px; }
+.chart-canvas { width: 100%; height: 100%; }
+
+/* === 二级页面 Overlay === */
+.detail-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000; background: rgba(0,0,0,0.8); backdrop-filter: blur(6px); }
+.detail-overlay.active { display: flex; align-items: center; justify-content: center; }
+.overlay-inner {
+  background: #111827;
+  border: 1px solid #1a2332;
+  border-radius: 16px;
+  width: 95vw;
+  max-width: 1100px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(0,212,170,0.05);
+}
+.overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, #0d1420, #111827);
+  border-bottom: 1px solid #1a2332;
+  color: #fff;
+  border-radius: 16px 16px 0 0;
+}
+.overlay-title { font-size: 18px; font-weight: 700; color: #00d4aa; text-shadow: 0 0 20px #00d4aa44; }
+.overlay-close {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid #1a2332;
+  color: #94a3b8;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+.overlay-close:hover { background: #00d4aa22; color: #00d4aa; border-color: #00d4aa44; }
+.overlay-body { padding: 24px; background: #0d1420; }
+.overlay-back { font-size: 12px; color: #64748b; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: color 0.2s; }
+.overlay-back:hover { color: #00d4aa; }
+
+/* === 详情表格 === */
+.detail-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.detail-table th { background: #0d1420; padding: 10px 12px; text-align: left; font-weight: 700; color: #00d4aa; border-bottom: 1px solid #1a2332; text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px; }
+.detail-table td { padding: 10px 12px; border-bottom: 1px solid #1a2332; color: #94a3b8; }
+.detail-table tr:hover td { background: #111827; }
+.detail-chart { height: 200px; margin-top: 16px; }
+
+/* === 网格布局 === */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.mt-8 { margin-top: 8px; }
+.mt-16 { margin-top: 16px; }
+
+/* === 响应式 === */
+@media (max-width: 1200px) {
+  .main-container { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 768px) {
+  .main-container { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- 顶栏 -->
+<div class="topbar">
+  <div class="topbar-logo">CRVAB <span>智慧工厂指挥中心</span></div>
+  <div class="topbar-right">
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div class="status-dot"></div>
+      <span style="font-size:13px;color:rgba(255,255,255,0.8);">实时监控</span>
+    </div>
+    <div class="topbar-time" id="clock">--:--:--</div>
+  </div>
+</div>
+
+<!-- 主布局 -->
+<div class="main-container">
+
+  <!-- 左栏 -->
+  <div class="col-left">
+    <!-- 今日概览 KPI -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">今日概览</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon orange">🏭</div>
+        <div class="kpi-info">
+          <div class="kpi-label">今日产量</div>
+          <div class="kpi-value" id="kpi-output">-- <span class="kpi-unit">吨</span></div>
+        </div>
+        <div class="kpi-trend up" id="kpi-output-trend">+12%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon blue">🔬</div>
+        <div class="kpi-info">
+          <div class="kpi-label">发酵罐运行</div>
+          <div class="kpi-value" id="kpi-tanks">-- <span class="kpi-unit">台</span></div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon purple">⚠️</div>
+        <div class="kpi-info">
+          <div class="kpi-label">待处理告警</div>
+          <div class="kpi-value" id="kpi-alerts">-- <span class="kpi-unit">条</span></div>
+        </div>
+        <div class="kpi-trend down" id="kpi-alerts-trend">-3</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon green">📋</div>
+        <div class="kpi-info">
+          <div class="kpi-label">进行中工单</div>
+          <div class="kpi-value" id="kpi-orders">-- <span class="kpi-unit">个</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 实时曲线 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">主控温度曲线</div>
+        <span style="font-size:12px;color:#4ECDC4;font-weight:600;" id="main-temp-val">--°C</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="mainTempChart" class="chart-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- 班组状态 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">班组状态</div>
+      </div>
+      <div class="shift-item">
+        <div style="flex:1;">
+          <div class="shift-name">早班 A组</div>
+          <div class="shift-time">06:00 - 14:00</div>
+        </div>
+        <div class="shift-members">5人</div>
+      </div>
+      <div class="shift-item">
+        <div style="flex:1;">
+          <div class="shift-name">中班 B组</div>
+          <div class="shift-time">14:00 - 22:00</div>
+        </div>
+        <div class="shift-members">4人</div>
+      </div>
+      <div class="shift-item">
+        <div style="flex:1;">
+          <div class="shift-name">夜班 C组</div>
+          <div class="shift-time">22:00 - 06:00</div>
+        </div>
+        <div class="shift-members">3人</div>
+      </div>
+    </div>
+
+    <!-- 活动日志 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">活动日志</div>
+      </div>
+      <div class="mini-list">
+        <div class="mini-item">
+          <span class="mini-item-label">WO2026050803 出料完成</span>
+          <span class="mini-item-value" style="font-size:11px;color:#888;">10:32</span>
+        </div>
+        <div class="mini-item">
+          <span class="mini-item-label">F002 温度告警恢复</span>
+          <span class="mini-item-value" style="font-size:11px;color:#888;">09:15</span>
+        </div>
+        <div class="mini-item">
+          <span class="mini-item-label">原料 M003 入库</span>
+          <span class="mini-item-value" style="font-size:11px;color:#888;">08:50</span>
+        </div>
+        <div class="mini-item">
+          <span class="mini-item-label">WO2026050802 开始发酵</span>
+          <span class="mini-item-value" style="font-size:11px;color:#888;">08:00</span>
+        </div>
+        <div class="mini-item">
+          <span class="mini-item-label">F001 设备检修完成</span>
+          <span class="mini-item-value" style="font-size:11px;color:#888;">07:30</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 中左栏 -->
+  <div class="col-center">
+    <!-- 发酵罐状态 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">发酵罐状态</div>
+        <span class="panel-more" onclick="openTankOverlay()">查看全部 →</span>
+      </div>
+      <div class="tank-grid" id="tank-grid">
+        <!-- JS 填充 -->
+        <div style="text-align:center;color:#aaa;font-size:13px;padding:20px;">加载中...</div>
+      </div>
+    </div>
+
+    <!-- 工单进度 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">工单进度</div>
+        <span class="panel-more" onclick="openOrdersOverlay()">查看全部 →</span>
+      </div>
+      <div class="order-list" id="order-list">
+        <div style="text-align:center;color:#aaa;font-size:13px;padding:20px;">加载中...</div>
+      </div>
+    </div>
+
+    <!-- 能耗监控 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">能耗监控</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon teal">⚡</div>
+        <div class="kpi-info">
+          <div class="kpi-label">今日用电</div>
+          <div class="kpi-value">1,248 <span class="kpi-unit">kWh</span></div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon orange">💧</div>
+        <div class="kpi-info">
+          <div class="kpi-label">今日用水</div>
+          <div class="kpi-value">386 <span class="kpi-unit">m³</span></div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon purple">🔥</div>
+        <div class="kpi-info">
+          <div class="kpi-label">蒸汽用量</div>
+          <div class="kpi-value">520 <span class="kpi-unit">m³</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 中右栏 -->
+  <div class="col-right">
+    <!-- 质量指标 -->
+    <div class="panel clickable" onclick="openQualityOverlay()">
+      <div class="panel-header">
+        <div class="panel-title">质量指标</div>
+        <span class="panel-more">查看详情 →</span>
+      </div>
+      <div class="quality-grid">
+        <div class="quality-item">
+          <div class="quality-label">糖转化率</div>
+          <div class="quality-value good" id="ql-sugar">--%</div>
+          <div class="quality-bar"><div class="quality-bar-fill green" id="ql-sugar-bar" style="width:0%"></div></div>
+        </div>
+        <div class="quality-item">
+          <div class="quality-label">酶活性</div>
+          <div class="quality-value good" id="ql-enzyme">--U/g</div>
+          <div class="quality-bar"><div class="quality-bar-fill green" id="ql-enzyme-bar" style="width:0%"></div></div>
+        </div>
+        <div class="quality-item">
+          <div class="quality-label">发酵周期</div>
+          <div class="quality-value good" id="ql-cycle">--h</div>
+          <div class="quality-bar"><div class="quality-bar-fill green" id="ql-cycle-bar" style="width:0%"></div></div>
+        </div>
+        <div class="quality-item">
+          <div class="quality-label">杂菌率</div>
+          <div class="quality-value good" id="ql-micro">--%</div>
+          <div class="quality-bar"><div class="quality-bar-fill green" id="ql-micro-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 设备状态 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">设备状态</div>
+        <span class="panel-more" onclick="openEquipmentOverlay()">查看全部 →</span>
+      </div>
+      <div class="eq-list" id="eq-list">
+        <div style="text-align:center;color:#aaa;font-size:13px;padding:20px;">加载中...</div>
+      </div>
+    </div>
+
+    <!-- 产量排名 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">今日产量排名</div>
+      </div>
+      <div class="rank-list">
+        <div class="rank-item">
+          <div class="rank-num">1</div>
+          <div class="rank-name">F003 发酵罐</div>
+          <div class="rank-value">4.2t</div>
+        </div>
+        <div class="rank-item">
+          <div class="rank-num n2">2</div>
+          <div class="rank-name">F002 发酵罐</div>
+          <div class="rank-value">3.8t</div>
+        </div>
+        <div class="rank-item">
+          <div class="rank-num n3">3</div>
+          <div class="rank-name">F001 发酵罐</div>
+          <div class="rank-value">3.1t</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 维保计划 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">维保计划</div>
+      </div>
+      <div class="mini-list">
+        <div class="mini-item">
+          <span class="mini-item-label">F001 搅拌器检修</span>
+          <span class="mini-item-value" style="font-size:11px;color:#E65100;">明日</span>
+        </div>
+        <div class="mini-item">
+          <span class="mini-item-label">配料罐 P002 清洗</span>
+          <span class="mini-item-value" style="font-size:11px;color:#888;">5月12日</span>
+        </div>
+        <div class="mini-item">
+          <span class="mini-item-label">F003 温度探头校准</span>
+          <span class="mini-item-value" style="font-size:11px;color:#888;">5月15日</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右栏 -->
+  <div class="col-far-right">
+    <!-- 今日产出 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">今日产出</div>
+        <span class="panel-more" onclick="openOutputOverlay()">查看详情 →</span>
+      </div>
+      <div class="output-row">
+        <div class="output-name">酶制剂 Pro</div>
+        <div style="text-align:right;">
+          <div class="output-value" id="out-enzyme">--</div>
+          <div class="output-unit">kg / 批</div>
+        </div>
+      </div>
+      <div class="output-row">
+        <div class="output-name">益生菌 Pro</div>
+        <div style="text-align:right;">
+          <div class="output-value" id="out-probio">--</div>
+          <div class="output-unit">kg / 批</div>
+        </div>
+      </div>
+      <div class="output-row">
+        <div class="output-name">复合酶</div>
+        <div style="text-align:right;">
+          <div class="output-value" id="out-complex">--</div>
+          <div class="output-unit">kg / 批</div>
+        </div>
+      </div>
+      <div class="output-row" style="background:#00d4aa22;border-radius:8px;padding:8px 12px;margin-top:4px;border:1px solid #00d4aa44;">
+        <div class="output-name" style="font-weight:700;">合计</div>
+        <div style="text-align:right;">
+          <div class="output-value" style="color:#00d4aa;" id="out-total">--</div>
+          <div class="output-unit">kg</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 原料库存 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">原料库存</div>
+        <span class="panel-more" onclick="openMatStockOverlay()">查看全部 →</span>
+      </div>
+      <div id="mat-stock-list">
+        <div style="text-align:center;color:#aaa;font-size:13px;padding:20px;">加载中...</div>
+      </div>
+    </div>
+
+    <!-- 告警中心 -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">告警中心</div>
+        <span class="panel-more" onclick="openAlertOverlay()">查看全部 →</span>
+      </div>
+      <div class="alert-list" id="alert-list">
+        <div style="text-align:center;color:#aaa;font-size:13px;padding:20px;">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================================================ -->
+<!-- 二级页面 Overlay -->
+<!-- ================================================ -->
+
+<!-- 发酵罐详情 -->
+<div class="detail-overlay" id="tank-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <div class="overlay-back" onclick="closeOverlay('tank-overlay')">← 返回</div>
+      <div class="overlay-title">发酵罐详情</div>
+      <button class="overlay-close" onclick="closeOverlay('tank-overlay')">×</button>
+    </div>
+    <div class="overlay-body">
+      <div class="grid-3" id="tank-detail-grid">
+        <!-- JS 填充 -->
+      </div>
+      <div class="detail-chart">
+        <canvas id="detailChart" style="width:100%;height:200px;"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 工单列表 -->
+<div class="detail-overlay" id="orders-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <div class="overlay-back" onclick="closeOverlay('orders-overlay')">← 返回</div>
+      <div class="overlay-title">工单列表</div>
+      <button class="overlay-close" onclick="closeOverlay('orders-overlay')">×</button>
+    </div>
+    <div class="overlay-body">
+      <table class="detail-table">
+        <thead>
+          <tr>
+            <th>工单号</th><th>产品</th><th>发酵罐</th><th>配方</th><th>状态</th><th>开始时间</th><th>预计结束</th>
+          </tr>
+        </thead>
+        <tbody id="orders-tbody">
+          <!-- JS 填充 -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 质量指标详情 -->
+<div class="detail-overlay" id="quality-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <div class="overlay-back" onclick="closeOverlay('quality-overlay')">← 返回</div>
+      <div class="overlay-title">质量指标详情</div>
+      <button class="overlay-close" onclick="closeOverlay('quality-overlay')">×</button>
+    </div>
+    <div class="overlay-body">
+      <div class="grid-2">
+        <div>
+          <h4 style="margin-bottom:12px;color:#e2e8f0;">糖转化率趋势</h4>
+          <div class="detail-chart"><canvas id="sugarChart" style="width:100%;height:200px;"></canvas></div>
+        </div>
+        <div>
+          <h4 style="margin-bottom:12px;color:#e2e8f0;">酶活性趋势</h4>
+          <div class="detail-chart"><canvas id="enzymeChart" style="width:100%;height:200px;"></canvas></div>
+        </div>
+      </div>
+      <table class="detail-table mt-16">
+        <thead>
+          <tr><th>指标</th><th>当前值</th><th>目标值</th><th>达标率</th><th>状态</th></tr>
+        </thead>
+        <tbody id="quality-tbody">
+          <!-- JS 填充 -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 设备总览 -->
+<div class="detail-overlay" id="equipment-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <div class="overlay-back" onclick="closeOverlay('equipment-overlay')">← 返回</div>
+      <div class="overlay-title">设备总览</div>
+      <button class="overlay-close" onclick="closeOverlay('equipment-overlay')">×</button>
+    </div>
+    <div class="overlay-body">
+      <table class="detail-table">
+        <thead>
+          <tr><th>设备编号</th><th>设备名称</th><th>位置</th><th>状态</th><th>运行时长</th><th>下次维保</th></tr>
+        </thead>
+        <tbody id="equipment-tbody">
+          <!-- JS 填充 -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 今日产出详情 -->
+<div class="detail-overlay" id="output-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <div class="overlay-back" onclick="closeOverlay('output-overlay')">← 返回</div>
+      <div class="overlay-title">今日产出详情</div>
+      <button class="overlay-close" onclick="closeOverlay('output-overlay')">×</button>
+    </div>
+    <div class="overlay-body">
+      <div class="grid-3">
+        <div class="panel" style="text-align:center;">
+          <div style="font-size:32px;margin-bottom:4px;">🧪</div>
+          <div style="font-size:24px;font-weight:700;color:#00d4aa;" id="ov-enzyme">--</div>
+          <div style="color:#64748b;font-size:12px;">酶制剂 Pro (kg)</div>
+        </div>
+        <div class="panel" style="text-align:center;">
+          <div style="font-size:32px;margin-bottom:4px;">🦠</div>
+          <div style="font-size:24px;font-weight:700;color:#4ECDC4;" id="ov-probio">--</div>
+          <div style="color:#64748b;font-size:12px;">益生菌 Pro (kg)</div>
+        </div>
+        <div class="panel" style="text-align:center;">
+          <div style="font-size:32px;margin-bottom:4px;">⚙️</div>
+          <div style="font-size:24px;font-weight:700;color:#9C27B0;" id="ov-complex">--</div>
+          <div style="color:#64748b;font-size:12px;">复合酶 (kg)</div>
+        </div>
+      </div>
+      <div class="detail-chart mt-16">
+        <canvas id="outputChart" style="width:100%;height:180px;"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 原料库存详情 -->
+<div class="detail-overlay" id="matstock-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <div class="overlay-back" onclick="closeOverlay('matstock-overlay')">← 返回</div>
+      <div class="overlay-title">原料库存详情</div>
+      <button class="overlay-close" onclick="closeOverlay('matstock-overlay')">×</button>
+    </div>
+    <div class="overlay-body">
+      <table class="detail-table">
+        <thead>
+          <tr><th>原料名称</th><th>批次号</th><th>库存量</th><th>单位</th><th>入库日期</th><th>到期日期</th><th>状态</th></tr>
+        </thead>
+        <tbody id="matstock-tbody">
+          <!-- JS 填充 -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 告警详情 -->
+<div class="detail-overlay" id="alert-overlay">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <div class="overlay-back" onclick="closeOverlay('alert-overlay')">← 返回</div>
+      <div class="overlay-title">告警详情</div>
+      <button class="overlay-close" onclick="closeOverlay('alert-overlay')">×</button>
+    </div>
+    <div class="overlay-body">
+      <table class="detail-table">
+        <thead>
+          <tr><th>级别</th><th>设备/位置</th><th>告警内容</th><th>发生时间</th><th>状态</th></tr>
+        </thead>
+        <tbody id="alert-tbody">
+          <!-- JS 填充 -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api';
+
+// ========== 时钟 ==========
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('zh-CN', {hour12: false});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ========== 随机游走 ==========
+function randomWalk(last, noise, min, max) {
+  const next = last + (Math.random() - 0.5) * noise * 2;
+  return Math.max(min, Math.min(max, next));
+}
+
+// ========== 曲线 Chart ==========
+function makeChart(canvasId, color, dataLen) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.offsetWidth * 2;
+  const H = canvas.height = canvas.offsetHeight * 2;
+  ctx.scale(2, 2);
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  let data = [];
+  for (let i = 0; i < dataLen; i++) data.push(h / 2 + (Math.random() - 0.5) * 20);
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+    if (data.length < 2) return;
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, color + '40');
+    grad.addColorStop(1, color + '00');
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    data.forEach((v, i) => ctx.lineTo(i / (data.length - 1) * w, v));
+    ctx.lineTo(w, h);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.beginPath();
+    data.forEach((v, i) => i === 0 ? ctx.moveTo(i / (data.length - 1) * w, v) : ctx.lineTo(i / (data.length - 1) * w, v));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  return {
+    push(v) { data.push(v); if (data.length > dataLen) data.shift(); draw(); },
+    setData(newData) { data = newData.slice(-dataLen); draw(); }
+  };
+}
+
+const mainTempChart = makeChart('mainTempChart', '#4ECDC4', 30);
+let mainTempLast = 37.0;
+
+// ========== 告警列表 ==========
+function renderAlertList(alerts) {
+  const el = document.getElementById('alert-list');
+  if (!alerts || alerts.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:#aaa;font-size:13px;padding:16px;">暂无告警</div>';
+    return;
+  }
+  document.getElementById('kpi-alerts').textContent = alerts.length;
+  el.innerHTML = alerts.slice(0, 3).map(a => {
+    const isError = a.level === 'critical' || a.level === 'error';
+    return `<div class="alert-item ${isError ? 'critical' : ''}">
+      <div class="alert-icon">${isError ? '🔴' : '🟡'}</div>
+      <div class="alert-content">
+        <div class="alert-msg">${a.message}</div>
+        <div class="alert-time">${a.tank_id || a.equipment_id || ''} · ${a.created_at ? a.created_at.slice(11, 16) : ''}</div>
+      </div>
+      <div class="alert-level ${isError ? 'error' : 'warn'}">${a.level === 'critical' ? '严重' : a.level === 'error' ? '错误' : '警告'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ========== 工单列表 ==========
+function renderOrderList(orders) {
+  const el = document.getElementById('order-list');
+  const statusMap = { pending: ['待排产', 'pending'], scheduled: ['已排产', 'scheduled'], fermenting: ['发酵中', 'fermenting'], completed: ['已完成', 'completed'] };
+  if (!orders || orders.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:#aaa;font-size:13px;padding:16px;">暂无工单</div>';
+    return;
+  }
+  document.getElementById('kpi-orders').textContent = orders.length;
+  const cols = ['#FF6B35','#4ECDC4','#9C27B0'];
+  el.innerHTML = orders.slice(0, 3).map((o, i) => {
+    const [label, cls] = statusMap[o.status] || ['未知', 'pending'];
+    return `<div class="order-item ${cols[i % 3] !== '#FF6B35' ? cols[i % 3] === '#4ECDC4' ? 'blue' : 'purple' : ''}" style="border-left-color:${cols[i % 3]}">
+      <div>
+        <div class="order-id">${o.order_no}</div>
+        <div class="order-meta">${o.tank_id} · ${o.product_name || o.product_id}</div>
+      </div>
+      <div class="order-status ${cls}">${label}</div>
+    </div>`;
+  }).join('');
+}
+
+// ========== 原料库存 ==========
+function renderMatStock(materials) {
+  const el = document.getElementById('mat-stock-list');
+  if (!materials || materials.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:#aaa;font-size:13px;padding:16px;">暂无数据</div>';
+    return;
+  }
+  el.innerHTML = materials.slice(0, 5).map(m => {
+    const pct = Math.min(100, (m.quantity / (m.quantity + 100)) * 100);
+    const level = pct > 60 ? 'high' : pct > 30 ? 'mid' : 'low';
+    return `<div class="mat-row">
+      <span class="mat-name">${m.name}</span>
+      <div class="mat-level">
+        <div class="bar-sm"><div class="bar-sm-fill ${level}" style="width:${pct}%"></div></div>
+        <span class="mat-qty">${m.quantity} ${m.unit || 'kg'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ========== 设备列表 ==========
+function renderEquipment(eqs) {
+  const el = document.getElementById('eq-list');
+  if (!eqs || eqs.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:#aaa;font-size:13px;padding:16px;">暂无数据</div>';
+    return;
+  }
+  const iconMap = { fermenter: '🏭', agitator: '🔧', pump: '💧', valve: '🔘', sensor: '📡' };
+  const statusMap = { running: ['正常', 'ok'], idle: ['待机', 'warn'], maintenance: ['维保', 'warn'], fault: ['故障', 'alert'] };
+  el.innerHTML = eqs.slice(0, 4).map(e => {
+    const [label, cls] = statusMap[e.status] || ['未知', 'warn'];
+    const icon = iconMap[e.category] || '⚙️';
+    return `<div class="eq-item">
+      <div class="eq-icon">${icon}</div>
+      <div class="eq-info">
+        <div class="eq-name">${e.name}</div>
+        <div class="eq-location">${e.location || e.category || ''}</div>
+      </div>
+      <div class="eq-badge ${cls}">${label}</div>
+    </div>`;
+  }).join('');
+}
+
+// ========== 发酵罐状态 ==========
+const tankCharts = {};
+const tankState = {};
+
+function renderTankGrid(tanks) {
+  const el = document.getElementById('tank-grid');
+  if (!tanks || tanks.length === 0) {
+    el.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#aaa;font-size:13px;padding:20px;">暂无数据</div>';
+    return;
+  }
+  document.getElementById('kpi-tanks').textContent = tanks.length + '台';
+  el.innerHTML = tanks.slice(0, 4).map(t => {
+    const statusMap = { running: ['运行中', 'running'], idle: ['空闲', 'idle'], fermenting: ['发酵中', 'running'], scheduled: ['已排产', 'idle'] };
+    const [label, cls] = statusMap[t.status] || ['未知', 'idle'];
+    return `<div class="tank-card" onclick="openTankOverlay('${t.tank_id}')">
+      <div class="tank-card-header">
+        <div class="tank-name">${t.tank_id}</div>
+        <div class="tank-status ${cls}">${label}</div>
+      </div>
+      <div class="tank-params">
+        <div class="tank-param"><div class="tank-param-label">温度</div><div class="tank-param-value" id="tp-t-${t.tank_id}">--°C</div></div>
+        <div class="tank-param"><div class="tank-param-label">pH</div><div class="tank-param-value" id="tp-p-${t.tank_id}">--</div></div>
+        <div class="tank-param"><div class="tank-param-label">DO</div><div class="tank-param-value" id="tp-do-${t.tank_id}">--%</div></div>
+        <div class="tank-param"><div class="tank-param-label">转速</div><div class="tank-param-value" id="tp-rpm-${t.tank_id}">--</div></div>
+      </div>
+      <div class="tank-mini-chart"><canvas id="tank-chart-${t.tank_id}" style="width:100%;height:30px;"></canvas></div>
+    </div>`;
+  }).join('');
+
+  tanks.slice(0, 4).forEach(t => {
+    const canvasId = `tank-chart-${t.tank_id}`;
+    const canvas = document.getElementById(canvasId);
+    if (canvas) {
+      tankCharts[t.tank_id] = makeChart(canvasId, '#4ECDC4', 20);
+      tankState[t.tank_id] = {
+        temp: parseFloat(t.current_temp) || 37.0,
+        ph: parseFloat(t.current_ph) || 7.0,
+        do: parseFloat(t.current_do) || 65,
+        rpm: parseFloat(t.current_rpm) || 150,
+        param: 'temp'
+      };
+      document.getElementById(`tp-t-${t.tank_id}`).textContent = tankState[t.tank_id].temp.toFixed(1) + '°C';
+      document.getElementById(`tp-p-${t.tank_id}`).textContent = tankState[t.tank_id].ph.toFixed(2);
+      document.getElementById(`tp-do-${t.tank_id}`).textContent = tankState[t.tank_id].do.toFixed(1) + '%';
+      document.getElementById(`tp-rpm-${t.tank_id}`).textContent = tankState[t.tank_id].rpm.toFixed(0);
+    }
+  });
+}
+
+// ========== 质量指标 ==========
+function renderQuality(data) {
+  if (!data) return;
+  const sugar = data.sugar_rate ?? 92.5;
+  const enzyme = data.enzyme_activity ?? 3850;
+  const cycle = data.fermentation_hours ?? 48;
+  const micro = data.microbe_rate ?? 0.12;
+
+  document.getElementById('ql-sugar').textContent = sugar.toFixed(1) + '%';
+  document.getElementById('ql-sugar-bar').style.width = Math.min(100, sugar) + '%';
+  document.getElementById('ql-enzyme').textContent = enzyme.toFixed(0) + 'U/g';
+  document.getElementById('ql-enzyme-bar').style.width = Math.min(100, enzyme / 50) + '%';
+  document.getElementById('ql-cycle').textContent = cycle.toFixed(0) + 'h';
+  document.getElementById('ql-cycle-bar').style.width = Math.min(100, cycle / 0.72) + '%';
+  document.getElementById('ql-micro').textContent = micro.toFixed(2) + '%';
+  document.getElementById('ql-micro-bar').style.width = Math.min(100, micro * 100) + '%';
+}
+
+// ========== 今日产出 ==========
+function renderOutput(data) {
+  if (!data) return;
+  const enzyme = data.enzyme_pro ?? 320;
+  const probio = data.probiotic_pro ?? 280;
+  const complex = data.complex_pro ?? 195;
+  const total = enzyme + probio + complex;
+  document.getElementById('out-enzyme').textContent = enzyme;
+  document.getElementById('out-probio').textContent = probio;
+  document.getElementById('out-complex').textContent = complex;
+  document.getElementById('out-total').textContent = total;
+  document.getElementById('ov-enzyme').textContent = enzyme;
+  document.getElementById('ov-probio').textContent = probio;
+  document.getElementById('ov-complex').textContent = complex;
+  document.getElementById('kpi-output').textContent = (total / 1000).toFixed(1) + ' ';
+}
+
+// ========== 二级页面 ==========
+function openOverlay(id) {
+  document.getElementById(id).classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+function closeOverlay(id) {
+  document.getElementById(id).classList.remove('active');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.detail-overlay.active').forEach(el => el.classList.remove('active'));
+    document.body.style.overflow = '';
+  }
+});
+
+function openTankOverlay(tankId) {
+  openOverlay('tank-overlay');
+  // 填充详情数据
+  const tanks = window._tankData || [];
+  const grid = document.getElementById('tank-detail-grid');
+  if (!tanks.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#aaa;">暂无数据</div>'; return; }
+  grid.innerHTML = tanks.slice(0, 6).map(t => {
+    const s = tankState[t.tank_id] || {};
+    return `<div class="panel" style="text-align:center;">
+      <div style="font-size:20px;font-weight:700;margin-bottom:4px;">${t.tank_id}</div>
+      <div style="font-size:12px;color:#888;margin-bottom:8px;">${s.temp ? s.temp.toFixed(1) + '°C' : '--°C'}</div>
+      <div style="font-size:22px;font-weight:700;color:#4ECDC4;">${s.temp ? s.temp.toFixed(1) : '--'}</div>
+      <div style="font-size:11px;color:#aaa;">温度 °C</div>
+      <div style="margin-top:8px;font-size:12px;">pH ${s.ph ? s.ph.toFixed(2) : '--'} | DO ${s.do ? s.do.toFixed(1) : '--'}%</div>
+    </div>`;
+  }).join('');
+}
+
+function openOrdersOverlay() {
+  openOverlay('orders-overlay');
+  const orders = window._orderData || [];
+  const statusMap = { pending: '待排产', scheduled: '已排产', fermenting: '发酵中', completed: '已完成' };
+  const tbody = document.getElementById('orders-tbody');
+  if (!orders.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#aaa;">暂无数据</td></tr>'; return; }
+  tbody.innerHTML = orders.map(o => {
+    const start = o.start_time ? new Date(o.start_time).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '--';
+    const end = o.end_time ? new Date(o.end_time).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '--';
+    return `<tr><td>${o.order_no}</td><td>${o.product_name || o.product_id}</td><td>${o.tank_id}</td><td>${o.recipe_id || '--'}</td><td>${statusMap[o.status] || o.status}</td><td>${start}</td><td>${end}</td></tr>`;
+  }).join('');
+}
+
+function openQualityOverlay() {
+  openOverlay('quality-overlay');
+  const tbody = document.getElementById('quality-tbody');
+  const rows = [
+    ['糖转化率', document.getElementById('ql-sugar').textContent, '≥90%', '97%', '达标'],
+    ['酶活性', document.getElementById('ql-enzyme').textContent, '≥3500U/g', '110%', '达标'],
+    ['发酵周期', document.getElementById('ql-cycle').textContent, '≤72h', '67%', '达标'],
+    ['杂菌率', document.getElementById('ql-micro').textContent, '≤0.5%', '24%', '达标']
+  ];
+  tbody.innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td style="color:#2E7D32;font-weight:600;">${r[4]}</td></tr>`).join('');
+}
+
+function openEquipmentOverlay() {
+  openOverlay('equipment-overlay');
+  const eqs = window._eqData || [];
+  const statusMap = { running: '运行中', idle: '空闲', maintenance: '维保中', fault: '故障' };
+  const tbody = document.getElementById('equipment-tbody');
+  if (!eqs.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;">暂无数据</td></tr>'; return; }
+  tbody.innerHTML = eqs.map(e => `<tr><td>${e.equipment_id}</td><td>${e.name}</td><td>${e.location || '--'}</td><td>${statusMap[e.status] || e.status}</td><td>${e.run_hours ? e.run_hours + 'h' : '--'}</td><td>${e.next_maintenance || '--'}</td></tr>`).join('');
+}
+
+function openOutputOverlay() { openOverlay('output-overlay'); }
+function openMatStockOverlay() {
+  openOverlay('matstock-overlay');
+  const mats = window._matData || [];
+  const tbody = document.getElementById('matstock-tbody');
+  if (!mats.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#aaa;">暂无数据</td></tr>'; return; }
+  tbody.innerHTML = mats.map(m => {
+    const inbound = m.inbound_date ? new Date(m.inbound_date).toLocaleDateString('zh-CN') : '--';
+    const expiry = m.expiry_date ? new Date(m.expiry_date).toLocaleDateString('zh-CN') : '--';
+    const today = new Date();
+    const expDate = m.expiry_date ? new Date(m.expiry_date) : null;
+    const isExpiring = expDate && (expDate - today) < 7 * 86400000;
+    return `<tr><td>${m.name}</td><td>${m.batch_no || '--'}</td><td>${m.quantity}</td><td>${m.unit || 'kg'}</td><td>${inbound}</td><td style="color:${isExpiring ? '#C62828' : '#333'}">${expiry}</td><td>${isExpiring ? '⚠️ 即将到期' : '正常'}</td></tr>`;
+  }).join('');
+}
+
+function openAlertOverlay() {
+  openOverlay('alert-overlay');
+  const alerts = window._alertData || [];
+  const tbody = document.getElementById('alert-tbody');
+  if (!alerts.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#aaa;">暂无告警</td></tr>'; return; }
+  tbody.innerHTML = alerts.map(a => {
+    const isError = a.level === 'critical' || a.level === 'error';
+    return `<tr><td><span class="alert-level ${isError ? 'error' : 'warn'}">${isError ? '严重' : '警告'}</span></td><td>${a.tank_id || a.equipment_id || '--'}</td><td>${a.message}</td><td>${a.created_at ? new Date(a.created_at).toLocaleString('zh-CN') : '--'}</td><td>${a.status === 'resolved' ? '已解决' : '处理中'}</td></tr>`;
+  }).join('');
+}
+
+// ========== 数据获取 ==========
+let qualityInterval;
+
+async function fetchAll() {
+  try {
+    const [orders, tanks, eqs, alerts, mats] = await Promise.all([
+      fetch(`${API}/production/orders`).then(r => r.json()).catch(() => ({code:-1,items:[]})),
+      fetch(`${API}/monitoring/tanks`).then(r => r.json()).catch(() => ({code:-1,items:[]})),
+      fetch(`${API}/equipment`).then(r => r.json()).catch(() => ({code:-1,items:[]})),
+      fetch(`${API}/equipment/alerts`).then(r => r.json()).catch(() => ({code:-1,items:[]})),
+      fetch(`${API}/materials/stock`).then(r => r.json()).catch(() => ({code:-1,items:[]}))
+    ]);
+
+    const orderItems = orders.code === 200 ? orders.data.items : [];
+    const tankItems = tanks.code === 200 ? tanks.data.items : [];
+    const eqItems = eqs.code === 200 ? eqs.data.items : [];
+    const alertItems = alerts.code === 200 ? alerts.data.items : [];
+    const matItems = mats.code === 200 ? mats.data.items : [];
+
+    window._orderData = orderItems;
+    window._tankData = tankItems;
+    window._eqData = eqItems;
+    window._alertData = alertItems;
+    window._matData = matItems;
+
+    renderOrderList(orderItems);
+    renderTankGrid(tankItems);
+    renderEquipment(eqItems);
+    renderAlertList(alertItems);
+    renderMatStock(matItems);
+
+    if (tankItems.length > 0) {
+      const t = tankItems[0];
+      renderQuality({ sugar_rate: 92.5, enzyme_activity: 3850, fermentation_hours: 48, microbe_rate: 0.12 });
+      renderOutput({ enzyme_pro: 320, probiotic_pro: 280, complex_pro: 195 });
+    }
+  } catch (e) {
+    console.warn('MES API unavailable, using mock data', e);
+    // Fallback to static data
+    renderOrderList([
+      {order_no:'WO2026050801',tank_id:'F001',product_name:'酶制剂 Pro',status:'pending'},
+      {order_no:'WO2026050802',tank_id:'F002',product_name:'益生菌 Pro',status:'fermenting'},
+      {order_no:'WO2026050803',tank_id:'F003',product_name:'复合酶',status:'scheduled'}
+    ]);
+    renderTankGrid([
+      {tank_id:'F001',status:'idle',current_temp:'--',current_ph:'--',current_do:'--',current_rpm:'--'},
+      {tank_id:'F002',status:'running',current_temp:'37.2',current_ph:'7.1',current_do:'65',current_rpm:'150'},
+      {tank_id:'F003',status:'running',current_temp:'36.8',current_ph:'6.9',current_do:'70',current_rpm:'145'}
+    ]);
+    renderEquipment([
+      {equipment_id:'E001',name:'发酵罐 F001',location:'发酵车间A区',status:'idle',category:'fermenter'},
+      {equipment_id:'E002',name:'发酵罐 F002',location:'发酵车间A区',status:'running',category:'fermenter'},
+      {equipment_id:'E003',name:'发酵罐 F003',location:'发酵车间B区',status:'running',category:'fermenter'}
+    ]);
+    renderAlertList([
+      {message:'F002 温度偏高',tank_id:'F002',level:'warning',created_at:new Date().toISOString()},
+      {message:'F001 搅拌器异常',tank_id:'F001',level:'warning',created_at:new Date(Date.now()-3600000).toISOString()}
+    ]);
+    renderMatStock([
+      {name:'玉米淀粉',quantity:850,unit:'kg',batch_no:'B20250501'},
+      {name:'大豆蛋白',quantity:320,unit:'kg',batch_no:'B20250502'},
+      {name:'酶制剂基础培养基',quantity:580,unit:'kg',batch_no:'B20250503'}
+    ]);
+    renderQuality({ sugar_rate: 92.5, enzyme_activity: 3850, fermentation_hours: 48, microbe_rate: 0.12 });
+    renderOutput({ enzyme_pro: 320, probiotic_pro: 280, complex_pro: 195 });
+  }
+}
+
+// ========== 实时更新 ==========
+async function updateRealtime() {
+  // 主曲线
+  mainTempLast = randomWalk(mainTempLast, 0.1, 35.5, 38.5);
+  document.getElementById('main-temp-val').textContent = mainTempLast.toFixed(1) + '°C';
+  if (mainTempChart) mainTempChart.push(mainTempLast);
+
+  // 发酵罐参数游走
+  Object.keys(tankState).forEach(tid => {
+    const s = tankState[tid];
+    s.temp = randomWalk(s.temp, 0.1, 35.5, 38.5);
+    s.ph = randomWalk(s.ph, 0.03, 6.5, 7.5);
+    s.do = randomWalk(s.do, 2, 50, 80);
+    s.rpm = randomWalk(s.rpm, 5, 130, 170);
+    const el = document.getElementById(`tp-t-${tid}`);
+    if (el) el.textContent = s.temp.toFixed(1) + '°C';
+    const ep = document.getElementById(`tp-p-${tid}`);
+    if (ep) ep.textContent = s.ph.toFixed(2);
+    const edo = document.getElementById(`tp-do-${tid}`);
+    if (edo) edo.textContent = s.do.toFixed(1) + '%';
+    const erpm = document.getElementById(`tp-rpm-${tid}`);
+    if (erpm) erpm.textContent = s.rpm.toFixed(0);
+    if (tankCharts[tid]) tankCharts[tid].push(s.temp);
+  });
+}
+
+fetchAll();
+setInterval(updateRealtime, 2000);
+</script>
+</body>
+</html>

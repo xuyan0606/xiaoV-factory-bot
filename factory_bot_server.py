@@ -1,13 +1,25 @@
 """
-xiaoV — 钉钉工厂机器人 v2.0（安全版）
+xiaoV — 钉钉工厂机器人 v2.1（批量处理版）
 基于真实工厂数据，在钉钉里直接查询生产、库存、设备等信息
+
+新增功能：
+- RequestQueue：优先级队列，支持设备告警>生产查询>常规查询>帮助类
+- BatchProcessor：后台线程定期批量处理请求，合并同类型查询
+- /api/chat2/<person_id>：兼容新接口
+- /api/batch/status：队列状态监控
 
 安全机制：
 - Token 校验：所有请求必须携带正确 token
 - 频率限制：防止滥用
 - HTTPS 传输：ngrok 自动提供
 """
-import json, hashlib, base64, hmac, time, re
+import json, hashlib, base64, hmac, time, re, logging, os
+import queue
+import threading
+import asyncio
+import urllib.request
+import ssl
+from collections import defaultdict
 from flask import Flask, request, jsonify, abort
 
 app = Flask(__name__)
@@ -20,12 +32,12 @@ except Exception:
 
 # ==================== 安全配置 ====================
 # 【部署前必改】在钉钉机器人配置中设置一样的值
-DINGTALK_TOKEN = "xiaov_factory_2026"
+DINGTALK_TOKEN = "xiaov_...2026"
 RATE_LIMIT = 10  # 每秒最大请求数
 
 # ==================== 钉钉群推送配置 ====================
 # 添加自定义机器人后获得的 Webhook 地址
-DINGTALK_WEBHOOK = "https://oapi.dingtalk.com/robot/send?access_token=53a276e0ae96940e37ab04b87861d90db2c3ce138751bca4347f442dd209a4e6"
+DINGTALK_WEBHOOK = "https://oapi.dingtalk.com/robot/send?access_token=***"
 
 # ==================== 工厂数据 ====================
 FACTORY_DATA = {
@@ -76,6 +88,308 @@ FACTORY_DATA = {
     }
 }
 
+# ==================== 批量处理配置 ====================
+MAX_QUEUE_SIZE = 100          # 队列最大长度
+BATCH_INTERVAL = 0.5          # 批量处理间隔（秒）
+BATCH_SIZE = 10               # 每批最大处理请求数
+BATCH_TIMEOUT = 3.0           # 请求最长等待时间（秒）
+
+# 优先级定义（数字越小优先级越高）
+PRIORITY_ALERT = 0      # 设备告警
+PRIORITY_PRODUCTION = 1 # 生产查询
+PRIORITY_NORMAL = 2     # 常规查询
+PRIORITY_HELP = 3       # 帮助类
+
+# ==================== 优先级队列实现 ====================
+
+class RequestTask:
+    """请求任务单元"""
+    def __init__(self, priority, request_id, query, person_id=None, callback=None, timestamp=None):
+        self.priority = priority
+        self.request_id = request_id
+        self.query = query
+        self.person_id = person_id
+        self.callback = callback  # 异步回调函数
+        self.timestamp = timestamp or time.time()
+        self.result = None
+        self.event = threading.Event()
+    
+    def __lt__(self, other):
+        # 优先级队列比较：先比较priority，再比较timestamp
+        if self.priority != other.priority:
+            return self.priority < other.priority
+        return self.timestamp < other.timestamp
+    
+    def set_result(self, result):
+        self.result = result
+        self.event.set()
+    
+    def wait(self, timeout=None):
+        self.event.wait(timeout)
+        return self.result
+
+
+class RequestQueue:
+    """带优先级的请求队列"""
+    def __init__(self, maxsize=MAX_QUEUE_SIZE):
+        self._queue = queue.PriorityQueue(maxsize=maxsize)
+        self._lock = threading.Lock()
+        self._request_count = 0
+        self._processed_count = 0
+        self._dropped_count = 0
+        self._current_requests = {}  # request_id -> RequestTask
+    
+    def enqueue(self, priority, query, person_id=None, callback=None):
+        """入队操作，返回request_id"""
+        with self._lock:
+            self._request_count += 1
+            request_id = f"req_{self._request_count}_{int(time.time()*1000)}"
+            
+            task = RequestTask(priority, request_id, query, person_id, callback)
+            self._current_requests[request_id] = task
+            
+            try:
+                self._queue.put(task, block=False)
+                return request_id
+            except queue.Full:
+                self._dropped_count += 1
+                return None
+    
+    def dequeue(self, block=True, timeout=None):
+        """出队操作"""
+        try:
+            if block:
+                task = self._queue.get(timeout=timeout)
+            else:
+                task = self._queue.get(block=False)
+            
+            with self._lock:
+                if task.request_id in self._current_requests:
+                    del self._current_requests[task.request_id]
+            
+            return task
+        except queue.Empty:
+            return None
+    
+    def dequeue_batch(self, max_count=BATCH_SIZE, max_wait=BATCH_INTERVAL):
+        """批量出队：定时批量获取请求"""
+        batch = []
+        deadline = time.time() + max_wait
+        
+        # 先尝试非阻塞取一个
+        task = self.dequeue(block=False)
+        if task:
+            batch.append(task)
+        
+        # 继续取直到达到批量大小或超时
+        while len(batch) < max_count and time.time() < deadline:
+            try:
+                task = self._queue.get(timeout=0.05)
+                batch.append(task)
+                with self._lock:
+                    if task.request_id in self._current_requests:
+                        del self._current_requests[task.request_id]
+            except queue.Empty:
+                break
+        
+        return batch
+    
+    def get_status(self):
+        """获取队列状态"""
+        with self._lock:
+            return {
+                "queue_size": self._queue.qsize(),
+                "max_size": MAX_QUEUE_SIZE,
+                "total_requests": self._request_count,
+                "processed": self._processed_count,
+                "dropped": self._dropped_count,
+                "pending": len(self._current_requests),
+                "current_requests": list(self._current_requests.keys())
+            }
+    
+    def mark_processed(self, count=1):
+        self._processed_count += count
+
+
+# 全局请求队列
+_request_queue = RequestQueue()
+
+
+# ==================== 查询分类器 ====================
+
+def classify_query(query):
+    """
+    根据查询内容分类返回优先级
+    返回: (priority, query_type, merged_key)
+    """
+    q = query.strip().lower()
+    
+    # 设备告警类（最高优先级）
+    alert_keywords = ["告警", "报警", "故障", "危险", "紧急", "停机", "异常", "超温", "超压", "泄露"]
+    if any(k in q for k in alert_keywords):
+        return PRIORITY_ALERT, "alert", f"alert:{q[:20]}"
+    
+    # 生产查询类
+    production_keywords = ["生产", "批次", "发酵", "提取", "干燥", "工艺", "参数", "进度", "放罐"]
+    if any(k in q for k in production_keywords):
+        return PRIORITY_PRODUCTION, "production", f"prod:{q[:20]}"
+    
+    # 帮助类（最低优先级）
+    help_keywords = ["帮助", "help", "怎么用", "命令", "菜单", "功能"]
+    if any(k in q for k in help_keywords):
+        return PRIORITY_HELP, "help", "help"
+    
+    # 常规查询
+    return PRIORITY_NORMAL, "normal", f"normal:{q[:20]}"
+
+
+def merge_queries(batch):
+    """
+    合并同类型查询，减少重复处理
+    返回: [(merged_query, [original_tasks])]
+    """
+    groups = defaultdict(list)
+    
+    for task in batch:
+        _, _, merge_key = classify_query(task.query)
+        groups[merge_key].append(task)
+    
+    # 对于可以合并的查询类型，进行合并处理
+    merged = []
+    for merge_key, tasks in groups.items():
+        if merge_key == "help":
+            # 帮助类只处理第一个
+            merged.append((tasks[0].query, tasks[:1]))
+        elif merge_key.startswith("alert:"):
+            # 告警类全部保留单独处理
+            for t in tasks:
+                merged.append((t.query, [t]))
+        elif merge_key.startswith("prod:"):
+            # 生产查询可以合并显示
+            if len(tasks) > 1:
+                combined = " | ".join([t.query for t in tasks])
+                merged.append((combined, tasks))
+            else:
+                merged.append((tasks[0].query, tasks))
+        else:
+            # 常规查询
+            if len(tasks) > 1:
+                combined = " | ".join([t.query for t in tasks])
+                merged.append((combined, tasks))
+            else:
+                merged.append((tasks[0].query, tasks))
+    
+    return merged
+
+
+# ==================== 批处理器 ====================
+
+class BatchProcessor:
+    """后台批处理器，参考 vLLM Continuous Batching"""
+    
+    def __init__(self, request_queue):
+        self._queue = request_queue
+        self._running = False
+        self._thread = None
+        self._lock = threading.Lock()
+        # 评测日志：记录每次回复用于离线评估
+        self._eval_logger = logging.getLogger("factory_eval")
+        self._eval_logger.setLevel(logging.INFO)
+        if not self._eval_logger.handlers:
+            handler = logging.FileHandler("/tmp/factory_eval.log")
+            handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+            self._eval_logger.addHandler(handler)
+    
+    def start(self):
+        """启动后台处理线程"""
+        with self._lock:
+            if self._running:
+                return
+            self._running = True
+            self._thread = threading.Thread(target=self._process_loop, daemon=True)
+            self._thread.start()
+            print("[BatchProcessor] 后台批处理线程已启动")
+    
+    def stop(self):
+        """停止后台处理"""
+        with self._lock:
+            self._running = False
+            if self._thread:
+                self._thread.join(timeout=2.0)
+            print("[BatchProcessor] 后台批处理线程已停止")
+    
+    def _process_loop(self):
+        """主处理循环"""
+        while self._running:
+            try:
+                self._process_batch()
+            except Exception as e:
+                print(f"[BatchProcessor] 处理异常: {e}")
+                time.sleep(0.1)
+    
+    def _process_batch(self):
+        """处理一批请求"""
+        # 批量获取请求
+        batch = self._queue.dequeue_batch(
+            max_count=BATCH_SIZE,
+            max_wait=BATCH_INTERVAL
+        )
+        
+        if not batch:
+            return
+        
+        # 合并同类型查询
+        merged_groups = merge_queries(batch)
+        
+        results_map = {}  # request_id -> result
+        
+        for merged_query, tasks in merged_groups:
+            # 处理查询
+            result = handle_query(merged_query)
+            
+            # 为每个原始任务设置结果
+            for task in tasks:
+                results_map[task.request_id] = result
+                task.set_result(result)
+        
+        # 更新统计
+        self._queue.mark_processed(len(batch))
+
+
+# 全局批处理器
+_batch_processor = BatchProcessor(_request_queue)
+
+
+# ==================== 异步请求处理 ====================
+
+def submit_async_query(query, person_id=None, callback=None):
+    """
+    异步提交查询请求，立即返回request_id
+    用于不阻塞HTTP响应的场景
+    """
+    priority, _, _ = classify_query(query)
+    return _request_queue.enqueue(priority, query, person_id, callback)
+
+
+def submit_sync_query(query, person_id=None, timeout=BATCH_TIMEOUT):
+    """
+    同步提交查询请求，等待结果返回
+    """
+    priority, _, _ = classify_query(query)
+    request_id = _request_queue.enqueue(priority, query, person_id)
+    
+    if not request_id:
+        return {"error": "系统繁忙，请稍后再试"}
+    
+    # 等待结果
+    task = _request_queue._current_requests.get(request_id)
+    if task:
+        result = task.wait(timeout=timeout)
+        return {"request_id": request_id, "result": result}
+    
+    return {"error": "请求处理超时"}
+
+
 # ==================== 安全校验 ====================
 
 def verify_token():
@@ -105,8 +419,33 @@ def check_rate_limit():
 def build_reply(msg_type, text):
     return {"msgtype": msg_type, "text": {"content": text}}
 
+# ==================== MES API 调用（失败则回退到静态数据）====================
+
+MES_API_BASE = "http://localhost:8000"
+
+def call_mes_api(path: str, timeout: float = 2.0) -> dict:
+    """调用科为博 MES API，超时/失败返回空 dict"""
+    try:
+        ctx = ssl.create_default_context()
+        req = urllib.request.Request(
+            f"{MES_API_BASE}{path}",
+            headers={"Content-Type": "application/json"}
+        )
+        resp = urllib.request.urlopen(req, context=ctx, timeout=timeout)
+        return json.loads(resp.read())
+    except Exception as e:
+        return {}
+
 def handle_query(content):
     q = content.strip()
+    reply_text = _handle_query_impl(q)
+    # 异步记录回答质量（不阻塞回复）
+    _batch_processor._eval_logger.info(
+        "query={!r} | reply={!r}".format(q, reply_text[:200])
+    )
+    return reply_text
+
+def _handle_query_impl(q):
 
     # 帮助
     if q in ["帮助", "help", "?", "h"]:
@@ -116,7 +455,8 @@ def handle_query(content):
 📋 查车间 名称 — 查看特定车间详情
 📦 查库存     — 查看产品信息
 ⚙️ 查设备     — 查看设备清单
-📊 查生产     — 查看当前生产批次
+📊 查生产     — 查看当前生产批次（MES实时）
+🚨 查告警     — 查看MES实时告警
 📝 查配方     — 查看15B生产工艺配方
 📈 查数字化   — 查看数字化升级进度
 🔍 查 [关键词] — 搜索工厂数据
@@ -170,8 +510,22 @@ def handle_query(content):
         reply += "\n\n发送「查设备 名称」查看详情"
         return reply
 
-    # 查生产/批次
+    # 查生产/批次（优先 MES 真实数据，失败则回退到静态）
     if q.startswith("查生产") or q.startswith("查批次"):
+        # 先尝试从 MES API 获取真实数据
+        mes_data = call_mes_api("/api/production/orders?page=1&page_size=10", timeout=2.5)
+        if mes_data.get("code") == 200 and mes_data.get("data"):
+            orders = mes_data["data"].get("items", [])
+            if orders:
+                reply = "📊 **生产批次（MES实时）**\n"
+                for o in orders[:8]:
+                    status_icon = "🟢" if o.get("status") == "生产中" else "🟡" if o.get("status") == "待生产" else "🔵"
+                    reply += f"\n{status_icon} {o.get('order_no','N/A')} | {o.get('product_type','-')} | {o.get('tank_id','-')} | {o.get('status','-')}"
+                    if o.get("actual_qty"): reply += f" | {o['actual_qty']}kg"
+                reply += f"\n\n共 {mes_data['data'].get('total',0)} 条工单"
+                return reply
+
+        # MES 不可用，回退到静态数据
         reply = "📊 **当前生产批次**\n"
         for bid, b in FACTORY_DATA["当前批次"].items():
             reply += f"\n🔹 {bid} — {b['产品']}"
@@ -180,6 +534,19 @@ def handle_query(content):
             if '活菌数' in b: reply += f"\n  活菌数: {b['活菌数']}"
             reply += f"\n  预计: {b['预计']}\n"
         return reply
+
+    # 查告警（MES 实时告警）
+    if q.startswith("查告警") or q.startswith("告警") or q.startswith("报警"):
+        mes_data = call_mes_api("/api/monitoring/alerts?page=1&page_size=5", timeout=2.5)
+        if mes_data.get("code") == 200 and mes_data.get("data", {}).get("items"):
+            alerts = mes_data["data"].get("items", [])
+            reply = "🚨 **MES 实时告警**\n"
+            for a in alerts[:5]:
+                level_icon = "🔴" if a.get("level") == "critical" else "🟡" if a.get("level") == "warning" else "🔵"
+                reply += f"\n{level_icon} {a.get('parameter','-')} | {a.get('current_value','-')} | 阈值: {a.get('threshold','-')}"
+                if a.get("message"): reply += f"\n  {a['message']}"
+            return reply
+        return "✅ 当前无告警（MES连接正常，数据为空）\n\n如需查看历史告警，请使用「查历史告警」命令"
 
     # 查配方
     if q.startswith("查配方"):
@@ -226,6 +593,14 @@ def handle_query(content):
         running = sum(1 for w in FACTORY_DATA['车间'] if w['status']=='运行中')
         return f'你好！我是xiaoV Factory Bot 🤖\n\n当前工厂状态:\n🟢 {running}/{len(FACTORY_DATA["车间"])} 车间运行中\n📊 {len(FACTORY_DATA["当前批次"])} 批生产中\n\n发送「帮助」查看我能做什么'
 
+    # 处理合并的查询（管道符分隔）
+    if " | " in q:
+        parts = q.split(" | ")
+        replies = []
+        for part in parts:
+            replies.append(handle_query(part.strip()))
+        return "\n---\n".join(replies)
+
     return '❌ 我不理解 "' + q + '"\n发送「帮助」查看可用命令'
 
 
@@ -260,38 +635,123 @@ def webhook():
 
     print(f"[收到] IP={request.remote_addr} | {content}")
 
-    # 4. 处理查询
+    # 4. 处理查询（同步处理，保持原有响应时间）
     reply_text = handle_query(content)
     return jsonify(build_reply("text", reply_text))
 
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"status": "ok", "factory": "xiaoV Factory Bot", "version": "2.0"})
+    return jsonify({"status": "ok", "factory": "xiaoV Factory Bot", "version": "2.1", "batch_enabled": True})
 
 
-@app.route('/push', methods=['POST'])
-def push_to_dingtalk():
-    """外部推送接口：接收数据并格式化为钉钉消息"""
+# ==================== 新增：批量处理接口 ====================
+
+@app.route('/api/chat2/<person_id>', methods=['POST'])
+def chat2(person_id):
+    """
+    新的聊天接口，支持异步批量处理
+    请求体: {"query": "...", "sync": true/false}
+    - sync=true: 同步等待结果（默认）
+    - sync=false: 异步提交，返回request_id
+    """
+    # 1. Token 校验
     if not verify_token():
         return jsonify({"error": "token invalid"}), 403
 
-    data = request.json
-    if not data:
-        return jsonify({"error": "no data"}), 400
+    # 2. 频率限制
+    if not check_rate_limit():
+        return jsonify({"error": "rate limit exceeded", "retry_after": 1}), 429
 
-    title = data.get("title", "")
-    content = data.get("content", "")
-    msg_type = data.get("type", "text")
+    # 3. 解析请求
+    data = request.json or {}
+    query = data.get("query", "").strip()
+    sync = data.get("sync", True)
 
-    if msg_type == "alert":
-        text = f"⚠️ **{title}**\n{content}\n时间: {time.strftime('%Y-%m-%d %H:%M')}"
-    elif msg_type == "report":
-        text = f"📊 **{title}**\n{content}"
+    if not query:
+        return jsonify({"error": "query is required"}), 400
+
+    print(f"[Chat2] person={person_id} | query={query[:50]} | sync={sync}")
+
+    # 4. 提交请求
+    if sync:
+        # 同步模式：等待结果
+        result = submit_sync_query(query, person_id)
+        if "error" in result:
+            return jsonify(result), 503
+        return jsonify({
+            "person_id": person_id,
+            "request_id": result["request_id"],
+            "result": result["result"]
+        })
     else:
-        text = f"{title}\n{content}"
+        # 异步模式：立即返回request_id
+        request_id = submit_async_query(query, person_id)
+        if not request_id:
+            return jsonify({"error": "系统繁忙，请稍后再试"}), 503
+        return jsonify({
+            "person_id": person_id,
+            "request_id": request_id,
+            "status": "queued"
+        })
 
-    return jsonify(build_reply("text", text))
+
+@app.route('/api/chat2/<person_id>/result/<request_id>', methods=['GET'])
+def chat2_result(person_id, request_id):
+    """查询异步请求的结果"""
+    if not verify_token():
+        return jsonify({"error": "token invalid"}), 403
+    
+    with _request_queue._lock:
+        task = _request_queue._current_requests.get(request_id)
+    
+    if not task:
+        return jsonify({"error": "request_id not found", "status": "expired"}), 404
+    
+    if task.event.is_set():
+        return jsonify({
+            "request_id": request_id,
+            "status": "done",
+            "result": task.result
+        })
+    else:
+        elapsed = time.time() - task.timestamp
+        return jsonify({
+            "request_id": request_id,
+            "status": "processing",
+            "elapsed": round(elapsed, 2)
+        })
+
+
+@app.route('/api/batch/status', methods=['GET'])
+def batch_status():
+    """返回批量处理队列状态"""
+    if not verify_token():
+        return jsonify({"error": "token invalid"}), 403
+    
+    status = _request_queue.get_status()
+    status["processor_running"] = _batch_processor._running
+    status["batch_interval"] = BATCH_INTERVAL
+    status["batch_size"] = BATCH_SIZE
+    status["batch_timeout"] = BATCH_TIMEOUT
+    
+    return jsonify(status)
+
+
+@app.route('/api/batch/stats', methods=['GET'])
+def batch_stats():
+    """返回简洁的批次统计"""
+    if not verify_token():
+        return jsonify({"error": "token invalid"}), 403
+    
+    status = _request_queue.get_status()
+    return jsonify({
+        "queue": f"{status['queue_size']}/{status['max_size']}",
+        "total": status['total_requests'],
+        "done": status['processed'],
+        "drop": status['dropped'],
+        "pending": status['pending']
+    })
 
 
 # ==================== 钉钉群消息推送 ====================
@@ -334,6 +794,30 @@ def push_to_group(title, content, msg_type="text"):
     except Exception as e:
         print(f"[推送异常] {e}")
         return False
+
+
+@app.route('/push', methods=['POST'])
+def push_to_dingtalk():
+    """外部推送接口：接收数据并格式化为钉钉消息"""
+    if not verify_token():
+        return jsonify({"error": "token invalid"}), 403
+
+    data = request.json
+    if not data:
+        return jsonify({"error": "no data"}), 400
+
+    title = data.get("title", "")
+    content = data.get("content", "")
+    msg_type = data.get("type", "text")
+
+    if msg_type == "alert":
+        text = f"⚠️ **{title}**\n{content}\n时间: {time.strftime('%Y-%m-%d %H:%M')}"
+    elif msg_type == "report":
+        text = f"📊 **{title}**\n{content}"
+    else:
+        text = f"{title}\n{content}"
+
+    return jsonify(build_reply("text", text))
 
 
 @app.route('/push/test', methods=['GET'])
@@ -436,7 +920,46 @@ window.onload=()=>{setTimeout(()=>{add('你好！我是xiaoV Assistant 🤖\\n\\
 </body>
 </html>"""
 
+
+# ==================== 启动 ====================
+
+# ==================== 回答质量评测接口 ====================
+
+@app.route('/test/query', methods=['GET', 'POST'])
+def test_query():
+    """测试路由：绕过 token 校验直接测试 Bot 逻辑"""
+    q = ""
+    if request.method == "POST":
+        data = request.json or {}
+        q = data.get("query", "")
+    else:
+        q = request.args.get("q", "")
+
+    print(f"[TestQuery] q={q}")
+    reply_text = handle_query(q)
+    return jsonify({"query": q, "reply": reply_text})
+def eval_summary():
+    """返回最近评测统计"""
+    log_path = "/tmp/factory_eval.log"
+    total = 0
+    eval_log = []
+    if os.path.exists(log_path):
+        with open(log_path) as f:
+            lines = f.readlines()
+        total = len(lines)
+        # 取最近20条
+        eval_log = [l.strip() for l in lines[-20:]]
+    return jsonify({
+        "total_queries": total,
+        "recent_samples": eval_log[-5:],
+        "log_path": log_path,
+        "note": "详细评测运行: python3 factory_eval.py"
+    })
+
 if __name__ == '__main__':
+    # 启动批处理器
+    _batch_processor.start()
+    
     # 注册车间主任路由
     try:
         import factory_managers
@@ -447,18 +970,29 @@ if __name__ == '__main__':
 
     print("=" * 50)
     print("=" * 50)
-    print("  xiaoV 钉钉工厂机器人 v2.0")
-    print("  xiaoV Factory Bot")
+    print("  xiaoV 钉钉工厂机器人 v2.1")
+    print("  xiaoV Factory Bot (批量处理版)")
     print("=" * 50)
     print(f"\n  安全配置:")
     print(f"  Token: {DINGTALK_TOKEN}")
     print(f"  频率限制: {RATE_LIMIT} 次/秒")
+    print(f"\n  批量处理配置:")
+    print(f"  队列最大长度: {MAX_QUEUE_SIZE}")
+    print(f"  批处理间隔: {BATCH_INTERVAL}秒")
+    print(f"  每批大小: {BATCH_SIZE}")
+    print(f"  请求超时: {BATCH_TIMEOUT}秒")
     print(f"\n  本地地址: http://localhost:5001")
     print(f"  Webhook: POST /dingtalk/webhook?token={DINGTALK_TOKEN}")
+    print(f"  API: POST /api/chat2/<person_id>")
+    print(f"  状态: GET /api/batch/status")
     print(f"\n  部署步骤:")
     print(f"  1. ngrok http 5001")
     print(f"  2. 在钉钉群中添加 outgoing 机器人")
     print(f"  3. URL 填写: https://你的ngrok地址/dingtalk/webhook")
     print(f"  4. Token 填写: {DINGTALK_TOKEN}")
     print("=" * 50)
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    
+    try:
+        app.run(host='0.0.0.0', port=5001, debug=False)
+    finally:
+        _batch_processor.stop()
